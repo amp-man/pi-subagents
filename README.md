@@ -4,6 +4,8 @@ A [pi](https://pi.dev) extension that brings **Claude Code-style autonomous sub-
 
 > **Status:** Early release.
 
+<img width="600" alt="pi-subagents screenshot" src="https://github.com/tintinweb/pi-subagents/raw/master/media/screenshot.png" />
+
 ## Features
 
 - **Claude Code look & feel** — same tool names, calling conventions, and UI patterns (`Agent`, `get_subagent_result`, `steer_subagent`) — feels native
