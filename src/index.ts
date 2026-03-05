@@ -188,12 +188,14 @@ function resolveModel(
 }
 
 export default function (pi: ExtensionAPI) {
-  // Load custom agents from .pi/agents/*.md at init
-  const customAgents = loadCustomAgents(process.cwd());
-  registerCustomAgents(customAgents);
+  /** Reload custom agents from .pi/agents/*.md (called on init and each Agent invocation). */
+  const reloadCustomAgents = () => {
+    const agents = loadCustomAgents(process.cwd());
+    registerCustomAgents(agents);
+  };
 
-  const allTypes = getAvailableTypes();
-  const customNames = getCustomAgentNames();
+  // Initial load
+  reloadCustomAgents();
 
   // ---- Agent activity tracking + widget ----
   const agentActivity = new Map<string, AgentActivity>();
@@ -233,7 +235,7 @@ export default function (pi: ExtensionAPI) {
     widget.onTurnStart();
   });
 
-  // Build type descriptions for the tool description
+  // Build type description text (static built-in + dynamic custom note)
   const builtinDescs = [
     "- general-purpose: Full tool access for complex multi-step tasks.",
     "- Explore: Fast codebase exploration (read-only, defaults to haiku).",
@@ -242,16 +244,23 @@ export default function (pi: ExtensionAPI) {
     "- claude-code-guide: Documentation and help queries (read-only).",
   ];
 
-  const customDescs = customNames.map((name) => {
-    const cfg = getCustomAgentConfig(name);
-    return `- ${name}: ${cfg?.description ?? name}`;
-  });
+  /** Build the full type list text, including any currently loaded custom agents. */
+  const buildTypeListText = () => {
+    const names = getCustomAgentNames();
+    const customDescs = names.map((name) => {
+      const cfg = getCustomAgentConfig(name);
+      return `- ${name}: ${cfg?.description ?? name}`;
+    });
+    return [
+      "Built-in types:",
+      ...builtinDescs,
+      ...(customDescs.length > 0 ? ["", "Custom types:", ...customDescs] : []),
+      "",
+      "Custom agents can be defined in .pi/agents/<name>.md — they are picked up automatically.",
+    ].join("\n");
+  };
 
-  const typeListText = [
-    "Built-in types:",
-    ...builtinDescs,
-    ...(customDescs.length > 0 ? ["", "Custom types:", ...customDescs] : []),
-  ].join("\n");
+  const typeListText = buildTypeListText();
 
   // ---- Agent tool ----
 
@@ -286,7 +295,7 @@ Guidelines:
         description: "A short (3-5 word) description of the task (shown in UI).",
       }),
       subagent_type: Type.String({
-        description: `The type of specialized agent to use. Built-in: ${SUBAGENT_TYPES.join(", ")}. ${customNames.length > 0 ? `Custom: ${customNames.join(", ")}.` : "No custom agents defined."}`,
+        description: `The type of specialized agent to use. Built-in: ${SUBAGENT_TYPES.join(", ")}. Custom agents from .pi/agents/*.md are also available.`,
       }),
       model: Type.Optional(
         Type.String({
@@ -420,11 +429,14 @@ Guidelines:
       // Ensure we have UI context for widget rendering
       widget.setUICtx(ctx.ui as UICtx);
 
+      // Reload custom agents so new .pi/agents/*.md files are picked up without restart
+      reloadCustomAgents();
+
       const subagentType = params.subagent_type as SubagentType;
 
       // Validate subagent type
       if (!isValidType(subagentType)) {
-        return textResult(`Unknown agent type: "${params.subagent_type}". Valid types: ${allTypes.join(", ")}`);
+        return textResult(`Unknown agent type: "${params.subagent_type}". Valid types: ${getAvailableTypes().join(", ")}`);
       }
 
       const displayName = getDisplayName(subagentType);
@@ -717,7 +729,7 @@ Guidelines:
           "Usage: /agent <type> <prompt>",
           "",
           "Agent types:",
-          ...allTypes.map(
+          ...getAvailableTypes().map(
             (t) => `  ${t.padEnd(20)} ${getConfig(t).description}`,
           ),
           "",
@@ -734,7 +746,7 @@ Guidelines:
       const spaceIdx = trimmed.indexOf(" ");
       if (spaceIdx === -1) {
         ctx.ui.notify(
-          `Missing prompt. Usage: /agent <type> <prompt>\nTypes: ${allTypes.join(", ")}`,
+          `Missing prompt. Usage: /agent <type> <prompt>\nTypes: ${getAvailableTypes().join(", ")}`,
           "warning",
         );
         return;
@@ -745,7 +757,7 @@ Guidelines:
 
       if (!isValidType(typeName)) {
         ctx.ui.notify(
-          `Unknown agent type: "${typeName}"\nValid types: ${allTypes.join(", ")}`,
+          `Unknown agent type: "${typeName}"\nValid types: ${getAvailableTypes().join(", ")}`,
           "warning",
         );
         return;
