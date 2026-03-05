@@ -41,15 +41,25 @@ const HAIKU_MODEL_IDS = [
 function resolveDefaultModel(
   type: SubagentType,
   parentModel: Model<any> | undefined,
-  registry: { find(provider: string, modelId: string): Model<any> | undefined },
+  registry: { find(provider: string, modelId: string): Model<any> | undefined; getAvailable?(): Model<any>[] },
   customModel?: string,
 ): Model<any> | undefined {
+  // Build a set of available model keys for fast lookup
+  const available = registry.getAvailable?.();
+  const availableKeys = available
+    ? new Set(available.map((m: any) => `${m.provider}/${m.id}`))
+    : undefined;
+  const isAvailable = (provider: string, modelId: string) =>
+    !availableKeys || availableKeys.has(`${provider}/${modelId}`);
+
   // Custom agent model from frontmatter
   if (customModel) {
     const slashIdx = customModel.indexOf("/");
     if (slashIdx !== -1) {
-      const found = registry.find(customModel.slice(0, slashIdx), customModel.slice(slashIdx + 1));
-      if (found) return found;
+      const provider = customModel.slice(0, slashIdx);
+      const modelId = customModel.slice(slashIdx + 1);
+      const found = registry.find(provider, modelId);
+      if (found && isAvailable(provider, modelId)) return found;
     }
   }
 
@@ -57,7 +67,7 @@ function resolveDefaultModel(
 
   for (const modelId of HAIKU_MODEL_IDS) {
     const found = registry.find("anthropic", modelId);
-    if (found) return found;
+    if (found && isAvailable("anthropic", modelId)) return found;
   }
   return parentModel;
 }

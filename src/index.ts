@@ -133,7 +133,7 @@ function resolveCustomPrompt(config: CustomAgentConfig | undefined): {
  */
 function resolveModel(
   input: string,
-  registry: { find(provider: string, modelId: string): any; getAll(): any[] },
+  registry: { find(provider: string, modelId: string): any; getAll(): any[]; getAvailable?(): any[] },
 ): any | string {
   // 1. Exact match: "provider/modelId"
   const slashIdx = input.indexOf("/");
@@ -144,8 +144,8 @@ function resolveModel(
     if (found) return found;
   }
 
-  // 2. Fuzzy match against all models
-  const all = registry.getAll() as { id: string; name: string; provider: string }[];
+  // 2. Fuzzy match against available models (those with auth configured)
+  const all = (registry.getAvailable?.() ?? registry.getAll()) as { id: string; name: string; provider: string }[];
   const query = input.toLowerCase();
 
   // Score each model: prefer exact id match > id contains > name contains > provider+id contains
@@ -180,11 +180,11 @@ function resolveModel(
   }
 
   // 3. No match — list available models
-  const available = all
+  const modelList = all
     .map(m => `  ${m.provider}/${m.id}`)
     .sort()
     .join("\n");
-  return `Model not found: "${input}".\n\nAvailable models:\n${available}`;
+  return `Model not found: "${input}".\n\nAvailable models:\n${modelList}`;
 }
 
 export default function (pi: ExtensionAPI) {
