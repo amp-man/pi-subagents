@@ -5,13 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.2] - 2026-03-05
 
 ### Changed
 - Renamed package to `@tintinweb/pi-subagents`
 - Fuzzy model resolver now only matches models with auth configured (prevents selecting unconfigured providers)
-- `getDisplayName()` now delegates to `getConfig()` instead of separate lookups
-- Removed unused `Tool` type export from agent-types
+- Custom agents hot-reload on each `Agent` tool call (no restart needed for new `.pi/agents/*.md` files)
+- Updated pi dependencies to 0.56.1
 
 ### Refactored
 - Extracted `createActivityTracker()` — eliminates duplicated tool activity wiring between foreground and background paths
@@ -20,8 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extracted `getStatusLabel()` / `getStatusNote()` — consolidates 3 duplicated status formatting chains
 - Shared `extractText()` — consolidated duplicate from context.ts and agent-runner.ts
 - Added `ERROR_STATUSES` constant in widget for consistent status checks
+- `getDisplayName()` now delegates to `getConfig()` instead of separate lookups
+- Removed unused `Tool` type export from agent-types
 
-## [0.4.1] - 2026-03-05
+## [0.2.1] - 2026-03-05
 
 ### Added
 - **Persistent above-editor widget** — tree view of all running/queued/finished agents with animated spinners and live stats
@@ -75,7 +77,7 @@ Initial release.
 - **Thinking level** — per-agent extended thinking control
 - **`/agent` and `/agents` commands**
 
-[Unreleased]: https://github.com/tintinweb/pi-subagents/compare/v0.4.1...HEAD
-[0.4.1]: https://github.com/tintinweb/pi-subagents/compare/v0.2.0...v0.4.1
+[0.2.2]: https://github.com/tintinweb/pi-subagents/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/tintinweb/pi-subagents/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/tintinweb/pi-subagents/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/tintinweb/pi-subagents/releases/tag/v0.1.0
