@@ -117,6 +117,67 @@ function resolveCustomPrompt(config: CustomAgentConfig | undefined): {
   return { systemPromptOverride: config.systemPrompt };
 }
 
+/**
+ * Resolve a model string to a Model instance.
+ * Tries exact match first ("provider/modelId"), then fuzzy match against all available models.
+ * Returns the Model on success, or an error message string on failure.
+ */
+function resolveModel(
+  input: string,
+  registry: { find(provider: string, modelId: string): any; getAll(): any[] },
+): any | string {
+  // 1. Exact match: "provider/modelId"
+  const slashIdx = input.indexOf("/");
+  if (slashIdx !== -1) {
+    const provider = input.slice(0, slashIdx);
+    const modelId = input.slice(slashIdx + 1);
+    const found = registry.find(provider, modelId);
+    if (found) return found;
+  }
+
+  // 2. Fuzzy match against all models
+  const all = registry.getAll() as { id: string; name: string; provider: string }[];
+  const query = input.toLowerCase();
+
+  // Score each model: prefer exact id match > id contains > name contains > provider+id contains
+  let bestMatch: typeof all[number] | undefined;
+  let bestScore = 0;
+
+  for (const m of all) {
+    const id = m.id.toLowerCase();
+    const name = m.name.toLowerCase();
+    const full = `${m.provider}/${m.id}`.toLowerCase();
+
+    let score = 0;
+    if (id === query || full === query) {
+      score = 100; // exact
+    } else if (id.includes(query) || full.includes(query)) {
+      score = 60 + (query.length / id.length) * 30; // substring, prefer tighter matches
+    } else if (name.includes(query)) {
+      score = 40 + (query.length / name.length) * 20;
+    } else if (query.split(/[\s\-/]+/).every(part => id.includes(part) || name.includes(part) || m.provider.toLowerCase().includes(part))) {
+      score = 20; // all parts present somewhere
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = m;
+    }
+  }
+
+  if (bestMatch && bestScore >= 20) {
+    const found = registry.find(bestMatch.provider, bestMatch.id);
+    if (found) return found;
+  }
+
+  // 3. No match — list available models
+  const available = all
+    .map(m => `  ${m.provider}/${m.id}`)
+    .sort()
+    .join("\n");
+  return `Model not found: "${input}".\n\nAvailable models:\n${available}`;
+}
+
 export default function (pi: ExtensionAPI) {
   // Load custom agents from .pi/agents/*.md at init
   const customAgents = loadCustomAgents(process.cwd());
@@ -384,20 +445,14 @@ Guidelines:
       // Get custom agent config (if any)
       const customConfig = getCustomAgentConfig(subagentType);
 
-      // Resolve model if specified
+      // Resolve model if specified (supports exact "provider/modelId" or fuzzy match)
       let model = ctx.model;
       if (params.model) {
-        const slashIdx = params.model.indexOf("/");
-        if (slashIdx === -1) {
-          return textResult(`Model must be in "provider/modelId" format. Got: "${params.model}"`);
+        const resolved = resolveModel(params.model, ctx.modelRegistry);
+        if (typeof resolved === "string") {
+          return textResult(resolved);
         }
-        const provider = params.model.slice(0, slashIdx);
-        const modelId = params.model.slice(slashIdx + 1);
-        const found = ctx.modelRegistry.find(provider, modelId);
-        if (!found) {
-          return textResult(`Model not found: "${params.model}". Check provider and model ID.`);
-        }
-        model = found;
+        model = resolved;
       }
 
       // Resolve thinking: explicit param > custom config > undefined
