@@ -235,12 +235,12 @@ Real.`);
     expect(result.has("real")).toBe(true);
   });
 
-  it("skips agents that collide with built-in type names", () => {
+  it("allows agents with names matching defaults (overrides them)", () => {
     writeAgent("Explore", `---
 description: Custom Explore
 ---
 
-Should be skipped.`);
+Custom explore agent.`);
     writeAgent("custom", `---
 description: Custom Agent
 ---
@@ -248,7 +248,8 @@ description: Custom Agent
 Should be loaded.`);
 
     const result = loadCustomAgents(tmpDir);
-    expect(result.has("Explore")).toBe(false);
+    expect(result.has("Explore")).toBe(true);
+    expect(result.get("Explore")!.description).toBe("Custom Explore");
     expect(result.has("custom")).toBe(true);
   });
 
@@ -303,5 +304,28 @@ All.`);
     const agent = result.get("exttrue")!;
     expect(agent.extensions).toBe(true);
     expect(agent.skills).toBe(true);
+  });
+
+  it("handles enabled: false frontmatter", () => {
+    writeAgent("disabled", `---
+enabled: false
+---
+`);
+
+    const result = loadCustomAgents(tmpDir);
+    const agent = result.get("disabled")!;
+    expect(agent.enabled).toBe(false);
+  });
+
+  it("parses display_name frontmatter", () => {
+    writeAgent("myagent", `---
+description: My Agent
+display_name: MyAgent
+---
+
+Agent prompt.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("myagent")!.displayName).toBe("MyAgent");
   });
 });

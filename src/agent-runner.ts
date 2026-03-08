@@ -13,8 +13,8 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
-import { getToolsForType, getConfig, getCustomAgentConfig } from "./agent-types.js";
-import { buildSystemPrompt } from "./prompts.js";
+import { getToolsForType, getConfig, getAgentConfig } from "./agent-types.js";
+import { buildAgentPrompt } from "./prompts.js";
 import { buildParentContext, extractText } from "./context.js";
 import { detectEnv } from "./env.js";
 import type { SubagentType, ThinkingLevel } from "./types.js";
@@ -38,47 +38,34 @@ export function getGraceTurns(): number { return graceTurns; }
 /** Set the grace turns value (minimum 1). */
 export function setGraceTurns(n: number): void { graceTurns = Math.max(1, n); }
 
-/** Haiku model IDs to try for Explore agents (in preference order). */
-const HAIKU_MODEL_IDS = [
-  "claude-haiku-4-5-20251001",
-  "claude-3-5-haiku-20241022",
-];
-
 /**
  * Try to find the right model for an agent type.
- * Priority: explicit option > custom agent model > type-specific default > parent model.
+ * Priority: explicit option > config.model > parent model.
  */
 function resolveDefaultModel(
-  type: SubagentType,
   parentModel: Model<any> | undefined,
   registry: { find(provider: string, modelId: string): Model<any> | undefined; getAvailable?(): Model<any>[] },
-  customModel?: string,
+  configModel?: string,
 ): Model<any> | undefined {
-  // Build a set of available model keys for fast lookup
-  const available = registry.getAvailable?.();
-  const availableKeys = available
-    ? new Set(available.map((m: any) => `${m.provider}/${m.id}`))
-    : undefined;
-  const isAvailable = (provider: string, modelId: string) =>
-    !availableKeys || availableKeys.has(`${provider}/${modelId}`);
-
-  // Custom agent model from frontmatter
-  if (customModel) {
-    const slashIdx = customModel.indexOf("/");
+  if (configModel) {
+    const slashIdx = configModel.indexOf("/");
     if (slashIdx !== -1) {
-      const provider = customModel.slice(0, slashIdx);
-      const modelId = customModel.slice(slashIdx + 1);
+      const provider = configModel.slice(0, slashIdx);
+      const modelId = configModel.slice(slashIdx + 1);
+
+      // Build a set of available model keys for fast lookup
+      const available = registry.getAvailable?.();
+      const availableKeys = available
+        ? new Set(available.map((m: any) => `${m.provider}/${m.id}`))
+        : undefined;
+      const isAvailable = (p: string, id: string) =>
+        !availableKeys || availableKeys.has(`${p}/${id}`);
+
       const found = registry.find(provider, modelId);
       if (found && isAvailable(provider, modelId)) return found;
     }
   }
 
-  if (type !== "Explore") return parentModel;
-
-  for (const modelId of HAIKU_MODEL_IDS) {
-    const found = registry.find("anthropic", modelId);
-    if (found && isAvailable("anthropic", modelId)) return found;
-  }
   return parentModel;
 }
 
@@ -152,17 +139,60 @@ export async function runAgent(
   options: RunOptions,
 ): Promise<RunResult> {
   const config = getConfig(type);
-  const customConfig = getCustomAgentConfig(type);
+  const agentConfig = getAgentConfig(type);
   const env = await detectEnv(options.pi, ctx.cwd);
 
-  // Build system prompt: custom override > custom append > built-in
+  // Build system prompt: custom override > custom append > config-driven
   let systemPrompt: string;
   if (options.systemPromptOverride) {
     systemPrompt = options.systemPromptOverride;
   } else if (options.systemPromptAppend) {
-    systemPrompt = buildSystemPrompt(type, ctx.cwd, env) + "\n\n" + options.systemPromptAppend;
+    // Build a default prompt and append to it
+    const defaultConfig = agentConfig ?? {
+      name: type,
+      description: "",
+      builtinToolNames: [],
+      extensions: true,
+      skills: true,
+      systemPrompt: "",
+      promptMode: "replace" as const,
+      inheritContext: false,
+      runInBackground: false,
+      isolated: false,
+    };
+    systemPrompt = buildAgentPrompt(defaultConfig, ctx.cwd, env) + "\n\n" + options.systemPromptAppend;
+  } else if (agentConfig) {
+    systemPrompt = buildAgentPrompt(agentConfig, ctx.cwd, env);
   } else {
-    systemPrompt = buildSystemPrompt(type, ctx.cwd, env);
+    // Unknown type — use a minimal general-purpose prompt
+    systemPrompt = buildAgentPrompt({
+      name: type,
+      description: "General-purpose agent",
+      builtinToolNames: [],
+      extensions: true,
+      skills: true,
+      systemPrompt: `# Role
+You are a general-purpose coding agent for complex, multi-step tasks.
+You have full access to read, write, edit files, and execute commands.
+Do what has been asked; nothing more, nothing less.
+
+# Tool Usage
+- Use the read tool instead of cat/head/tail
+- Use the edit tool instead of sed/awk
+- Use the write tool instead of echo/heredoc
+- Use the find tool instead of bash find/ls for file search
+- Use the grep tool instead of bash grep/rg for content search
+- Make independent tool calls in parallel
+
+# Output
+- Use absolute file paths
+- Do not use emojis
+- Be concise but complete`,
+      promptMode: "replace",
+      inheritContext: false,
+      runInBackground: false,
+      isolated: false,
+    }, ctx.cwd, env);
   }
 
   const tools = getToolsForType(type, ctx.cwd);
@@ -182,13 +212,13 @@ export async function runAgent(
   });
   await loader.reload();
 
-  // Resolve model: explicit option > custom agent config > type-specific default > parent model
+  // Resolve model: explicit option > config.model > parent model
   const model = options.model ?? resolveDefaultModel(
-    type, ctx.model, ctx.modelRegistry, customConfig?.model,
+    ctx.model, ctx.modelRegistry, agentConfig?.model,
   );
 
-  // Resolve thinking level: explicit option > custom agent config > undefined (inherit)
-  const thinkingLevel = options.thinkingLevel ?? customConfig?.thinking;
+  // Resolve thinking level: explicit option > agent config > undefined (inherit)
+  const thinkingLevel = options.thinkingLevel ?? agentConfig?.thinking;
 
   const sessionOpts: Record<string, unknown> = {
     cwd: ctx.cwd,
@@ -225,7 +255,7 @@ export async function runAgent(
 
   // Track turns for graceful max_turns enforcement
   let turnCount = 0;
-  const maxTurns = options.maxTurns ?? customConfig?.maxTurns ?? defaultMaxTurns;
+  const maxTurns = options.maxTurns ?? agentConfig?.maxTurns ?? defaultMaxTurns;
   let softLimitReached = false;
   let aborted = false;
 

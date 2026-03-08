@@ -1,7 +1,8 @@
 /**
- * agent-types.ts — Agent type registry: tool sets and configs per subagent type.
+ * agent-types.ts — Unified agent type registry.
  *
- * Supports both built-in types and custom agents loaded from .pi/agents/*.md.
+ * Merges embedded default agents with user-defined agents from .pi/agents/*.md.
+ * User agents override defaults with the same name. Disabled agents are kept but excluded from spawning.
  */
 
 import {
@@ -14,7 +15,8 @@ import {
   createLsTool,
 } from "@mariozechner/pi-coding-agent";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import type { BuiltinSubagentType, SubagentType, SubagentTypeConfig, CustomAgentConfig } from "./types.js";
+import type { AgentConfig } from "./types.js";
+import { DEFAULT_AGENTS } from "./default-agents.js";
 
 type ToolFactory = (cwd: string) => AgentTool<any>;
 
@@ -31,107 +33,145 @@ const TOOL_FACTORIES: Record<string, ToolFactory> = {
 /** All known built-in tool names, derived from the factory registry. */
 export const BUILTIN_TOOL_NAMES = Object.keys(TOOL_FACTORIES);
 
-const BUILTIN_CONFIGS: Record<BuiltinSubagentType, SubagentTypeConfig> = {
-  "general-purpose": {
+/** Unified runtime registry of all agents (defaults + user-defined). */
+const agents = new Map<string, AgentConfig>();
+
+/**
+ * Register agents into the unified registry.
+ * Starts with DEFAULT_AGENTS, then overlays user agents (overrides defaults with same name).
+ * Disabled agents (enabled === false) are kept in the registry but excluded from spawning.
+ */
+export function registerAgents(userAgents: Map<string, AgentConfig>): void {
+  agents.clear();
+
+  // Start with defaults
+  for (const [name, config] of DEFAULT_AGENTS) {
+    agents.set(name, config);
+  }
+
+  // Overlay user agents (overrides defaults with same name)
+  for (const [name, config] of userAgents) {
+    agents.set(name, config);
+  }
+}
+
+/** Case-insensitive key resolution. */
+function resolveKey(name: string): string | undefined {
+  if (agents.has(name)) return name;
+  const lower = name.toLowerCase();
+  for (const key of agents.keys()) {
+    if (key.toLowerCase() === lower) return key;
+  }
+  return undefined;
+}
+
+/** Resolve a type name case-insensitively. Returns the canonical key or undefined. */
+export function resolveType(name: string): string | undefined {
+  return resolveKey(name);
+}
+
+/** Get the agent config for a type (case-insensitive). */
+export function getAgentConfig(name: string): AgentConfig | undefined {
+  const key = resolveKey(name);
+  return key ? agents.get(key) : undefined;
+}
+
+/** Get all enabled type names (for spawning and tool descriptions). */
+export function getAvailableTypes(): string[] {
+  return [...agents.entries()]
+    .filter(([_, config]) => config.enabled !== false)
+    .map(([name]) => name);
+}
+
+/** Get all type names including disabled (for UI listing). */
+export function getAllTypes(): string[] {
+  return [...agents.keys()];
+}
+
+/** Get names of default agents currently in the registry. */
+export function getDefaultAgentNames(): string[] {
+  return [...agents.entries()]
+    .filter(([_, config]) => config.isDefault === true)
+    .map(([name]) => name);
+}
+
+/** Get names of user-defined agents (non-defaults) currently in the registry. */
+export function getUserAgentNames(): string[] {
+  return [...agents.entries()]
+    .filter(([_, config]) => config.isDefault !== true)
+    .map(([name]) => name);
+}
+
+/** Check if a type is valid and enabled (case-insensitive). */
+export function isValidType(type: string): boolean {
+  const key = resolveKey(type);
+  if (!key) return false;
+  return agents.get(key)?.enabled !== false;
+}
+
+/** Get built-in tools for a type (case-insensitive). */
+export function getToolsForType(type: string, cwd: string): AgentTool<any>[] {
+  const key = resolveKey(type);
+  const raw = key ? agents.get(key) : undefined;
+  const config = raw?.enabled !== false ? raw : undefined;
+  const toolNames = config?.builtinToolNames?.length ? config.builtinToolNames : BUILTIN_TOOL_NAMES;
+  return toolNames.filter((n) => n in TOOL_FACTORIES).map((n) => TOOL_FACTORIES[n](cwd));
+}
+
+/** Get config for a type (case-insensitive, returns a SubagentTypeConfig-compatible object). Falls back to general-purpose. */
+export function getConfig(type: string): {
+  displayName: string;
+  description: string;
+  builtinToolNames: string[];
+  extensions: true | string[] | false;
+  skills: true | string[] | false;
+} {
+  const key = resolveKey(type);
+  const config = key ? agents.get(key) : undefined;
+  if (config && config.enabled !== false) {
+    return {
+      displayName: config.displayName ?? config.name,
+      description: config.description,
+      builtinToolNames: config.builtinToolNames ?? BUILTIN_TOOL_NAMES,
+      extensions: config.extensions,
+      skills: config.skills,
+    };
+  }
+
+  // Fallback for unknown/disabled types — general-purpose config
+  const gp = agents.get("general-purpose");
+  if (gp && gp.enabled !== false) {
+    return {
+      displayName: gp.displayName ?? gp.name,
+      description: gp.description,
+      builtinToolNames: gp.builtinToolNames ?? BUILTIN_TOOL_NAMES,
+      extensions: gp.extensions,
+      skills: gp.skills,
+    };
+  }
+
+  // Absolute fallback (should never happen)
+  return {
     displayName: "Agent",
     description: "General-purpose agent for complex, multi-step tasks",
     builtinToolNames: BUILTIN_TOOL_NAMES,
     extensions: true,
     skills: true,
-  },
-  "Explore": {
-    displayName: "Explore",
-    description: "Fast codebase exploration agent (read-only)",
-    builtinToolNames: ["read", "bash", "grep", "find", "ls"],
-    extensions: true,
-    skills: true,
-  },
-  "Plan": {
-    displayName: "Plan",
-    description: "Software architect for implementation planning (read-only)",
-    builtinToolNames: ["read", "bash", "grep", "find", "ls"],
-    extensions: true,
-    skills: true,
-  },
-  "statusline-setup": {
-    displayName: "Config",
-    description: "Configuration editor (read + edit only)",
-    builtinToolNames: ["read", "edit"],
-    extensions: false,
-    skills: false,
-  },
-  "claude-code-guide": {
-    displayName: "Guide",
-    description: "Documentation and help queries",
-    builtinToolNames: ["read", "grep", "find"],
-    extensions: false,
-    skills: false,
-  },
-};
-
-/** Runtime registry of custom agent configs. */
-const customAgents = new Map<string, CustomAgentConfig>();
-
-/** Register custom agents into the runtime registry. */
-export function registerCustomAgents(agents: Map<string, CustomAgentConfig>): void {
-  customAgents.clear();
-  for (const [name, config] of agents) {
-    customAgents.set(name, config);
-  }
+  };
 }
 
-/** Get the custom agent config if it exists. */
-export function getCustomAgentConfig(name: string): CustomAgentConfig | undefined {
-  return customAgents.get(name);
+// ---- Backwards-compatible aliases ----
+
+/** @deprecated Use registerAgents instead */
+export const registerCustomAgents = registerAgents;
+
+/** @deprecated Use getAgentConfig instead */
+export function getCustomAgentConfig(name: string): AgentConfig | undefined {
+  const key = resolveKey(name);
+  return key ? agents.get(key) : undefined;
 }
 
-/** Get all available type names (built-in + custom). */
-export function getAvailableTypes(): string[] {
-  return [...Object.keys(BUILTIN_CONFIGS), ...customAgents.keys()];
-}
-
-/** Get all custom agent names. */
+/** @deprecated Use getUserAgentNames instead */
 export function getCustomAgentNames(): string[] {
-  return [...customAgents.keys()];
-}
-
-/** Check if a type is valid (built-in or custom). */
-export function isValidType(type: string): boolean {
-  return type in BUILTIN_CONFIGS || customAgents.has(type);
-}
-
-/** Get built-in tools for a type. Works for both built-in and custom agents. */
-export function getToolsForType(type: SubagentType, cwd: string): AgentTool<any>[] {
-  const config = BUILTIN_CONFIGS[type as BuiltinSubagentType];
-  if (config) {
-    return config.builtinToolNames.map((n) => TOOL_FACTORIES[n](cwd));
-  }
-  const custom = customAgents.get(type);
-  if (custom) {
-    return custom.builtinToolNames
-      .filter((n) => n in TOOL_FACTORIES)
-      .map((n) => TOOL_FACTORIES[n](cwd));
-  }
-  // Fallback: all tools
-  return BUILTIN_TOOL_NAMES.map((n) => TOOL_FACTORIES[n](cwd));
-}
-
-/** Get config for a type. Works for both built-in and custom agents. */
-export function getConfig(type: SubagentType): SubagentTypeConfig {
-  const builtin = BUILTIN_CONFIGS[type as BuiltinSubagentType];
-  if (builtin) return builtin;
-
-  const custom = customAgents.get(type);
-  if (custom) {
-    return {
-      displayName: custom.name,
-      description: custom.description,
-      builtinToolNames: custom.builtinToolNames,
-      extensions: custom.extensions,
-      skills: custom.skills,
-    };
-  }
-
-  // Fallback for unknown types — general-purpose config
-  return BUILTIN_CONFIGS["general-purpose"];
+  return getUserAgentNames();
 }

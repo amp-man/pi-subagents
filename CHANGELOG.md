@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-08
+
+### Added
+- **Case-insensitive agent type lookup** — `"explore"`, `"EXPLORE"`, and `"Explore"` all resolve to the same agent. LLMs frequently lowercase type names; this prevents validation failures.
+- **Unknown type fallback** — unrecognized agent types fall back to `general-purpose` with a note, instead of hard-rejecting. Matches Claude Code behavior.
+- **Dynamic tool list for general-purpose** — `builtinToolNames` is now optional in `AgentConfig`. When omitted, the agent gets all tools from `TOOL_FACTORIES` at lookup time, so new tools added upstream are automatically available.
+- **Agent source indicators in `/agents` menu** — `•` (project), `◦` (global), `✕` (disabled) with legend. Defaults are unmarked.
+- **Disabled agents visible in UI** — disabled agents now show in the "Agent types" list (marked `✕`) with an Enable action, instead of being invisible.
+- **Enable action** — re-enable a disabled agent from the `/agents` menu. Stub files are auto-cleaned.
+- **Disable action for all agent types** — custom and ejected default agents can now be disabled from the UI, not just built-in defaults.
+- `resolveType()` export — case-insensitive type name resolution for external use.
+- `getAllTypes()` export — returns all agent names including disabled (for UI listing).
+- `source` field on `AgentConfig` — tracks where an agent was loaded from (`"default"`, `"project"`, `"global"`).
+
+### Fixed
+- **Model resolver checks auth for exact matches** — `resolveModel("anthropic/claude-haiku-4-5-20251001")` now fails gracefully when no Anthropic API key is configured, instead of returning a model that errors at the API call. Explore silently falls back to the parent model on non-Anthropic setups.
+
+### Changed
+- **Unified agent registry** — built-in and custom agents now use the same `AgentConfig` type and a single registry. No more separate code paths for built-in vs custom agents.
+- **Default agents are overridable** — creating a `.md` file with the same name as a default agent (e.g. `.pi/agents/Explore.md`) overrides it.
+- **`/agents` menu** — "Agent types" list shows defaults and custom agents together with source indicators. Default agents get Eject/Disable actions; overridden defaults get Reset to default.
+- **Eject action** — export a default agent's embedded config as a `.md` file to project or personal location for customization.
+- **Model labels** — provider-agnostic: strips `provider/` prefix and `-YYYYMMDD` date suffix (e.g. `anthropic/claude-haiku-4-5-20251001` → `claude-haiku-4-5`). Works for any provider.
+- **New frontmatter fields** — `display_name` (UI display name) and `enabled` (default: true; set to false to disable).
+- **Menu navigation** — Esc in agent detail returns to agent list (not main menu).
+
+### Removed
+- **`statusline-setup` and `claude-code-guide` agents** — removed as built-in types (never spawned programmatically). Users can recreate them as custom agents if needed.
+- `BuiltinSubagentType` union type, `SUBAGENT_TYPES` array, `DISPLAY_NAMES` map, `SubagentTypeConfig` interface — replaced by unified `AgentConfig`.
+- `buildSystemPrompt()` switch statement — replaced by config-driven `buildAgentPrompt()`.
+- `HAIKU_MODEL_IDS` fallback array — Explore's haiku default is now just the `model` field in its config.
+- `BUILTIN_MODEL_LABELS` — model labels now derived from config.
+- `ALL_TOOLS` hardcoded constant — general-purpose now derives tools dynamically.
+
+### Added
+- `src/default-agents.ts` — embedded default configs for general-purpose, Explore, and Plan.
+
 ## [0.2.7] - 2026-03-08
 
 ### Fixed
@@ -130,6 +167,7 @@ Initial release.
 - **Thinking level** — per-agent extended thinking control
 - **`/agent` and `/agents` commands**
 
+[0.3.0]: https://github.com/tintinweb/pi-subagents/compare/v0.2.7...v0.3.0
 [0.2.7]: https://github.com/tintinweb/pi-subagents/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/tintinweb/pi-subagents/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/tintinweb/pi-subagents/compare/v0.2.4...v0.2.5

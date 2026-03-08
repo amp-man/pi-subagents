@@ -7,44 +7,18 @@ import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 
 export type { ThinkingLevel };
 
-/** Built-in agent types. Custom agents use arbitrary string names. */
-export type BuiltinSubagentType = "general-purpose" | "Explore" | "Plan" | "statusline-setup" | "claude-code-guide";
+/** Agent type: any string name (built-in defaults or user-defined). */
+export type SubagentType = string;
 
-/** Agent type: built-in or custom (any string). */
-export type SubagentType = BuiltinSubagentType | (string & {});
+/** Names of the three embedded default agents. */
+export const DEFAULT_AGENT_NAMES = ["general-purpose", "Explore", "Plan"] as const;
 
-/** Display name mapping for built-in types. */
-export const DISPLAY_NAMES: Record<BuiltinSubagentType, string> = {
-  "general-purpose": "Agent",
-  "Explore": "Explore",
-  "Plan": "Plan",
-  "statusline-setup": "Config",
-  "claude-code-guide": "Guide",
-};
-
-export const SUBAGENT_TYPES: BuiltinSubagentType[] = [
-  "general-purpose",
-  "Explore",
-  "Plan",
-  "statusline-setup",
-  "claude-code-guide",
-];
-
-export interface SubagentTypeConfig {
-  displayName: string;
-  description: string;
-  builtinToolNames: string[];
-  /** true = inherit all, string[] = only listed, false = none */
-  extensions: true | string[] | false;
-  /** true = inherit all, string[] = only listed, false = none */
-  skills: true | string[] | false;
-}
-
-/** Configuration for a custom agent loaded from .pi/agents/<name>.md */
-export interface CustomAgentConfig {
+/** Unified agent configuration — used for both default and user-defined agents. */
+export interface AgentConfig {
   name: string;
+  displayName?: string;
   description: string;
-  builtinToolNames: string[];
+  builtinToolNames?: string[];
   /** true = inherit all, string[] = only listed, false = none */
   extensions: true | string[] | false;
   /** true = inherit all, string[] = only listed, false = none */
@@ -60,6 +34,12 @@ export interface CustomAgentConfig {
   runInBackground: boolean;
   /** Default for spawn: no extension tools */
   isolated: boolean;
+  /** true = this is an embedded default agent (informational) */
+  isDefault?: boolean;
+  /** false = agent is hidden from the registry */
+  enabled?: boolean;
+  /** Where this agent was loaded from */
+  source?: "default" | "project" | "global";
 }
 
 export type JoinMode = 'async' | 'group' | 'smart';

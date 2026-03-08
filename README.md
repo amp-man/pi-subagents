@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/5d1331e8-6d02-420b-b30a-dcbf838b1660
 - **Mid-run steering** — inject messages into running agents to redirect their work without restarting
 - **Session resume** — pick up where an agent left off, preserving full conversation context
 - **Graceful turn limits** — agents get a "wrap up" warning before hard abort, producing clean partial results instead of cut-off output
+- **Case-insensitive agent types** — `"explore"`, `"Explore"`, `"EXPLORE"` all work. Unknown types fall back to general-purpose with a note
 - **Fuzzy model selection** — specify models by name (`"haiku"`, `"sonnet"`) instead of full IDs, with automatic filtering to only available/configured models
 - **Context inheritance** — optionally fork the parent conversation into a sub-agent so it knows what's been discussed
 
@@ -75,21 +76,21 @@ Individual agent results render Claude Code-style in the conversation:
 
 Completed results can be expanded (ctrl+o in pi) to show the full agent output inline.
 
-## Built-in Agent Types
+## Default Agent Types
 
-| Type | Tools | Description |
-|------|-------|-------------|
-| `general-purpose` | all 7 | Full read/write access for complex multi-step tasks |
-| `Explore` | read, bash, grep, find, ls | Fast codebase exploration (read-only, defaults to haiku) |
-| `Plan` | read, bash, grep, find, ls | Software architect for implementation planning (read-only) |
-| `statusline-setup` | read, edit | Configuration editor |
-| `claude-code-guide` | read, grep, find | Documentation and help queries |
+| Type | Tools | Model | Description |
+|------|-------|-------|-------------|
+| `general-purpose` | all 7 | inherit | Full read/write access for complex multi-step tasks |
+| `Explore` | read, bash, grep, find, ls | haiku (falls back to inherit) | Fast codebase exploration (read-only) |
+| `Plan` | read, bash, grep, find, ls | inherit | Software architect for implementation planning (read-only) |
+
+Default agents can be **overridden** by creating a `.md` file with the same name (e.g. `.pi/agents/Explore.md`), or **disabled** per-project by creating a `.md` file with `enabled: false` frontmatter.
 
 ## Custom Agents
 
-Define custom agent types by creating `.md` files. The filename becomes the agent type name.
+Define custom agent types by creating `.md` files. The filename becomes the agent type name. Any name is allowed — using a default agent's name overrides it.
 
-Custom agents are discovered from two locations (higher priority wins):
+Agents are discovered from two locations (higher priority wins):
 
 | Priority | Location | Scope |
 |----------|----------|-------|
@@ -131,16 +132,18 @@ All fields are optional — sensible defaults for everything.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `description` | filename | Agent description shown in tool listings |
+| `display_name` | — | Display name for UI (e.g. widget, agent list) |
 | `tools` | all 7 | Comma-separated built-in tools: read, bash, edit, write, grep, find, ls. `none` for no tools |
 | `extensions` | `true` | Inherit MCP/extension tools. `false` to disable |
 | `skills` | `true` | Inherit skills from parent |
-| `model` | inherit parent | Model as `provider/modelId` |
+| `model` | inherit parent | Model — `provider/modelId` or fuzzy name (`"haiku"`, `"sonnet"`) |
 | `thinking` | inherit | off, minimal, low, medium, high, xhigh |
 | `max_turns` | 50 | Max agentic turns before graceful shutdown |
 | `prompt_mode` | `replace` | `replace`: body is the full system prompt. `append`: body appended to default prompt |
 | `inherit_context` | `false` | Fork parent conversation into agent |
 | `run_in_background` | `false` | Run in background by default |
 | `isolated` | `false` | No extension/MCP tools, only built-in |
+| `enabled` | `true` | Set to `false` to disable an agent (useful for hiding a default agent per-project) |
 
 Frontmatter sets defaults. Explicit `Agent` parameters always override them.
 
@@ -193,19 +196,19 @@ The `/agents` command opens an interactive menu:
 
 ```
 Running agents (2) — 1 running, 1 done     ← only shown when agents exist
-Custom agents (3)                           ← submenu: edit or delete agents
+Agent types (6)                             ← unified list: defaults + custom
 Create new agent                            ← manual wizard or AI-generated
 Settings                                    ← max concurrency, max turns, grace turns, join mode
-
-Built-in (always available):
-  general-purpose · inherit
-  Explore         · haiku
-  Plan            · inherit
-  ...
 ```
 
-- **Custom agents submenu** — select an agent to edit (opens editor) or delete
-- **Create new agent** — choose project/personal location, then manual wizard (step-by-step prompts for name, tools, model, thinking, system prompt) or AI-generated (describe what the agent should do and a sub-agent writes the `.md` file)
+- **Agent types** — unified list with source indicators: `•` (project), `◦` (global), `✕` (disabled). Select an agent to manage it:
+  - **Default agents** (no override): Eject (export as `.md`), Disable
+  - **Default agents** (ejected/overridden): Edit, Disable, Reset to default, Delete
+  - **Custom agents**: Edit, Disable, Delete
+  - **Disabled agents**: Enable, Edit, Delete
+- **Eject** — writes the embedded default config as a `.md` file to project or personal location, so you can customize it
+- **Disable/Enable** — toggle agent availability. Disabled agents stay visible in the list (marked `✕`) and can be re-enabled
+- **Create new agent** — choose project/personal location, then manual wizard (step-by-step prompts for name, tools, model, thinking, system prompt) or AI-generated (describe what the agent should do and a sub-agent writes the `.md` file). Any name is allowed, including default agent names (overrides them)
 - **Settings** — configure max concurrency, default max turns, grace turns, and join mode at runtime
 
 ## Graceful Max Turns
@@ -250,13 +253,14 @@ When background agents complete, they notify the main agent. The **join mode** c
 ```
 src/
   index.ts            # Extension entry: tool/command registration, rendering
-  types.ts            # Type definitions (SubagentType, AgentRecord, configs)
-  agent-types.ts      # Agent type registry (built-in + custom), tool factories
+  types.ts            # Type definitions (AgentConfig, AgentRecord, etc.)
+  default-agents.ts   # Embedded default agent configs (general-purpose, Explore, Plan)
+  agent-types.ts      # Unified agent registry (defaults + user), tool factories
   agent-runner.ts     # Session creation, execution, graceful max_turns, steer/resume
   agent-manager.ts    # Agent lifecycle, concurrency queue, completion notifications
   group-join.ts       # Group join manager: batched completion notifications with timeout
-  custom-agents.ts    # Load custom agents from .pi/agents/*.md
-  prompts.ts          # System prompts per agent type
+  custom-agents.ts    # Load user-defined agents from .pi/agents/*.md
+  prompts.ts          # Config-driven system prompt builder
   context.ts          # Parent conversation context for inherit_context
   env.ts              # Environment detection (git, platform)
   ui/

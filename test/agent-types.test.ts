@@ -1,17 +1,19 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  registerCustomAgents,
-  getCustomAgentConfig,
+  registerAgents,
+  getAgentConfig,
   getAvailableTypes,
-  getCustomAgentNames,
+  getUserAgentNames,
+  getDefaultAgentNames,
   isValidType,
+  resolveType,
   getConfig,
   getToolsForType,
   BUILTIN_TOOL_NAMES,
 } from "../src/agent-types.js";
-import type { CustomAgentConfig } from "../src/types.js";
+import type { AgentConfig } from "../src/types.js";
 
-function makeCustomConfig(overrides: Partial<CustomAgentConfig> = {}): CustomAgentConfig {
+function makeAgentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
     name: "test-agent",
     description: "Test agent",
@@ -29,16 +31,19 @@ function makeCustomConfig(overrides: Partial<CustomAgentConfig> = {}): CustomAge
 
 describe("agent type registry", () => {
   beforeEach(() => {
-    registerCustomAgents(new Map());
+    registerAgents(new Map());
   });
 
-  describe("built-in types", () => {
-    it("recognizes all built-in types", () => {
+  describe("default agents", () => {
+    it("recognizes all default agent types", () => {
       expect(isValidType("general-purpose")).toBe(true);
       expect(isValidType("Explore")).toBe(true);
       expect(isValidType("Plan")).toBe(true);
-      expect(isValidType("statusline-setup")).toBe(true);
-      expect(isValidType("claude-code-guide")).toBe(true);
+    });
+
+    it("does not include removed agents", () => {
+      expect(isValidType("statusline-setup")).toBe(false);
+      expect(isValidType("claude-code-guide")).toBe(false);
     });
 
     it("rejects unknown types", () => {
@@ -46,7 +51,27 @@ describe("agent type registry", () => {
       expect(isValidType("")).toBe(false);
     });
 
-    it("returns correct config for built-in types", () => {
+    it("case-insensitive lookup works for isValidType", () => {
+      expect(isValidType("explore")).toBe(true);
+      expect(isValidType("EXPLORE")).toBe(true);
+      expect(isValidType("General-Purpose")).toBe(true);
+      expect(isValidType("plan")).toBe(true);
+    });
+
+    it("case-insensitive lookup works for getAgentConfig", () => {
+      const config = getAgentConfig("explore");
+      expect(config?.name).toBe("Explore");
+      expect(config?.model).toBe("anthropic/claude-haiku-4-5-20251001");
+    });
+
+    it("resolveType returns canonical key or undefined", () => {
+      expect(resolveType("Explore")).toBe("Explore");
+      expect(resolveType("explore")).toBe("Explore");
+      expect(resolveType("GENERAL-PURPOSE")).toBe("general-purpose");
+      expect(resolveType("nonexistent")).toBeUndefined();
+    });
+
+    it("returns correct config for default types", () => {
       const config = getConfig("general-purpose");
       expect(config.displayName).toBe("Agent");
       expect(config.builtinToolNames).toEqual(BUILTIN_TOOL_NAMES);
@@ -54,16 +79,28 @@ describe("agent type registry", () => {
       expect(config.skills).toBe(true);
     });
 
-    it("returns tools for built-in types", () => {
-      const tools = getToolsForType("statusline-setup", "/tmp");
-      expect(tools).toHaveLength(2); // read, edit
-    });
-
     it("Explore has read-only tools", () => {
       const config = getConfig("Explore");
       expect(config.builtinToolNames).toEqual(["read", "bash", "grep", "find", "ls"]);
       expect(config.builtinToolNames).not.toContain("edit");
       expect(config.builtinToolNames).not.toContain("write");
+    });
+
+    it("Explore has haiku model in config", () => {
+      const cfg = getAgentConfig("Explore");
+      expect(cfg?.model).toBe("anthropic/claude-haiku-4-5-20251001");
+    });
+
+    it("default agents are marked isDefault", () => {
+      const cfg = getAgentConfig("general-purpose");
+      expect(cfg?.isDefault).toBe(true);
+    });
+
+    it("getDefaultAgentNames returns default agent names", () => {
+      const names = getDefaultAgentNames();
+      expect(names).toContain("general-purpose");
+      expect(names).toContain("Explore");
+      expect(names).toContain("Plan");
     });
 
     it("BUILTIN_TOOL_NAMES is derived from factory keys", () => {
@@ -78,18 +115,18 @@ describe("agent type registry", () => {
     });
   });
 
-  describe("custom agents", () => {
-    it("registers and retrieves custom agents", () => {
-      const agents = new Map([["auditor", makeCustomConfig({ name: "auditor", description: "Auditor" })]]);
-      registerCustomAgents(agents);
+  describe("user agents", () => {
+    it("registers and retrieves user agents", () => {
+      const agents = new Map([["auditor", makeAgentConfig({ name: "auditor", description: "Auditor" })]]);
+      registerAgents(agents);
 
       expect(isValidType("auditor")).toBe(true);
-      expect(getCustomAgentConfig("auditor")?.description).toBe("Auditor");
+      expect(getAgentConfig("auditor")?.description).toBe("Auditor");
     });
 
-    it("includes custom agents in available types", () => {
-      const agents = new Map([["auditor", makeCustomConfig({ name: "auditor" })]]);
-      registerCustomAgents(agents);
+    it("includes user agents in available types", () => {
+      const agents = new Map([["auditor", makeAgentConfig({ name: "auditor" })]]);
+      registerAgents(agents);
 
       const types = getAvailableTypes();
       expect(types).toContain("general-purpose");
@@ -97,27 +134,27 @@ describe("agent type registry", () => {
       expect(types).toContain("auditor");
     });
 
-    it("lists custom agent names separately", () => {
+    it("lists user agent names separately", () => {
       const agents = new Map([
-        ["auditor", makeCustomConfig({ name: "auditor" })],
-        ["reviewer", makeCustomConfig({ name: "reviewer" })],
+        ["auditor", makeAgentConfig({ name: "auditor" })],
+        ["reviewer", makeAgentConfig({ name: "reviewer" })],
       ]);
-      registerCustomAgents(agents);
+      registerAgents(agents);
 
-      const names = getCustomAgentNames();
+      const names = getUserAgentNames();
       expect(names).toEqual(["auditor", "reviewer"]);
       expect(names).not.toContain("general-purpose");
     });
 
-    it("getConfig returns SubagentTypeConfig for custom agents", () => {
-      const agents = new Map([["auditor", makeCustomConfig({
+    it("getConfig returns config for user agents", () => {
+      const agents = new Map([["auditor", makeAgentConfig({
         name: "auditor",
         description: "Security auditor",
         builtinToolNames: ["read", "grep"],
         extensions: false,
         skills: true,
       })]]);
-      registerCustomAgents(agents);
+      registerAgents(agents);
 
       const config = getConfig("auditor");
       expect(config.displayName).toBe("auditor");
@@ -127,25 +164,25 @@ describe("agent type registry", () => {
       expect(config.skills).toBe(true);
     });
 
-    it("getConfig returns extension allowlist for custom agents", () => {
-      const agents = new Map([["partial", makeCustomConfig({
+    it("getConfig returns extension allowlist for user agents", () => {
+      const agents = new Map([["partial", makeAgentConfig({
         name: "partial",
         extensions: ["web-search"],
         skills: ["planning"],
       })]]);
-      registerCustomAgents(agents);
+      registerAgents(agents);
 
       const config = getConfig("partial");
       expect(config.extensions).toEqual(["web-search"]);
       expect(config.skills).toEqual(["planning"]);
     });
 
-    it("getToolsForType works for custom agents", () => {
-      const agents = new Map([["auditor", makeCustomConfig({
+    it("getToolsForType works for user agents", () => {
+      const agents = new Map([["auditor", makeAgentConfig({
         name: "auditor",
         builtinToolNames: ["read", "grep", "find"],
       })]]);
-      registerCustomAgents(agents);
+      registerAgents(agents);
 
       const tools = getToolsForType("auditor", "/tmp");
       expect(tools).toHaveLength(3);
@@ -157,18 +194,51 @@ describe("agent type registry", () => {
       expect(config.description).toBe("General-purpose agent for complex, multi-step tasks");
     });
 
-    it("clearing custom agents works", () => {
-      const agents = new Map([["auditor", makeCustomConfig({ name: "auditor" })]]);
-      registerCustomAgents(agents);
+    it("clearing user agents works (defaults remain)", () => {
+      const agents = new Map([["auditor", makeAgentConfig({ name: "auditor" })]]);
+      registerAgents(agents);
       expect(isValidType("auditor")).toBe(true);
 
-      registerCustomAgents(new Map());
+      registerAgents(new Map());
       expect(isValidType("auditor")).toBe(false);
+      expect(isValidType("general-purpose")).toBe(true);
     });
 
-    it("getCustomAgentConfig returns undefined for built-in types", () => {
-      expect(getCustomAgentConfig("general-purpose")).toBeUndefined();
-      expect(getCustomAgentConfig("Explore")).toBeUndefined();
+    it("user agent overrides default with same name", () => {
+      const agents = new Map([["Explore", makeAgentConfig({
+        name: "Explore",
+        description: "Custom Explore",
+        builtinToolNames: BUILTIN_TOOL_NAMES,
+      })]]);
+      registerAgents(agents);
+
+      const config = getConfig("Explore");
+      expect(config.description).toBe("Custom Explore");
+      expect(config.builtinToolNames).toEqual(BUILTIN_TOOL_NAMES);
+    });
+
+    it("disabled agent is excluded from available types", () => {
+      const agents = new Map([["Plan", makeAgentConfig({
+        name: "Plan",
+        enabled: false,
+      })]]);
+      registerAgents(agents);
+
+      expect(isValidType("Plan")).toBe(false);
+      expect(getAvailableTypes()).not.toContain("Plan");
+    });
+
+    it("general-purpose can be disabled but fallback still works", () => {
+      const agents = new Map([["general-purpose", makeAgentConfig({
+        name: "general-purpose",
+        enabled: false,
+      })]]);
+      registerAgents(agents);
+
+      expect(isValidType("general-purpose")).toBe(false);
+      // getConfig fallback should still return something reasonable
+      const config = getConfig("general-purpose");
+      expect(config.displayName).toBe("Agent");
     });
   });
 });
