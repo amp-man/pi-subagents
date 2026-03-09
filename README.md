@@ -7,7 +7,7 @@ A [pi](https://pi.dev) extension that brings **Claude Code-style autonomous sub-
 <img width="600" alt="pi-subagents screenshot" src="https://github.com/tintinweb/pi-subagents/raw/master/media/screenshot.png" />
 
 
-https://github.com/user-attachments/assets/5d1331e8-6d02-420b-b30a-dcbf838b1660
+https://github.com/user-attachments/assets/8685261b-9338-4fea-8dfe-1c590d5df543
 
 
 ## Features
@@ -15,6 +15,7 @@ https://github.com/user-attachments/assets/5d1331e8-6d02-420b-b30a-dcbf838b1660
 - **Claude Code look & feel** — same tool names, calling conventions, and UI patterns (`Agent`, `get_subagent_result`, `steer_subagent`) — feels native
 - **Parallel background agents** — spawn multiple agents that run concurrently with automatic queuing (configurable concurrency limit, default 4) and smart group join (consolidated notifications)
 - **Live widget UI** — persistent above-editor widget with animated spinners, live tool activity, token counts, and colored status icons
+- **Conversation viewer** — select any agent in `/agents` to open a live-scrolling overlay of its full conversation (auto-follows new content, scroll up to pause)
 - **Custom agent types** — define agents in `.pi/agents/<name>.md` with YAML frontmatter: custom system prompts, model selection, thinking levels, tool restrictions
 - **Mid-run steering** — inject messages into running agents to redirect their work without restarting
 - **Session resume** — pick up where an agent left off, preserving full conversation context
@@ -264,7 +265,8 @@ src/
   context.ts          # Parent conversation context for inherit_context
   env.ts              # Environment detection (git, platform)
   ui/
-    agent-widget.ts   # Persistent widget: spinners, activity, status icons, theming
+    agent-widget.ts       # Persistent widget: spinners, activity, status icons, theming
+    conversation-viewer.ts # Live conversation overlay for viewing agent sessions
 ```
 
 ## License

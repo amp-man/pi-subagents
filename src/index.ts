@@ -951,14 +951,44 @@ Guidelines:
       return;
     }
 
-    // Show as a selectable list for potential future actions
     const options = agents.map(a => {
       const dn = getDisplayName(a.type);
       const dur = formatDuration(a.startedAt, a.completedAt);
       return `${dn} (${a.description}) · ${a.toolUses} tools · ${a.status} · ${dur}`;
     });
 
-    await ctx.ui.select("Running agents", options);
+    const choice = await ctx.ui.select("Running agents", options);
+    if (!choice) return;
+
+    // Find the selected agent by matching the option index
+    const idx = options.indexOf(choice);
+    if (idx < 0) return;
+    const record = agents[idx];
+
+    await viewAgentConversation(ctx, record);
+    // Back-navigation: re-show the list
+    await showRunningAgents(ctx);
+  }
+
+  async function viewAgentConversation(ctx: ExtensionCommandContext, record: AgentRecord) {
+    if (!record.session) {
+      ctx.ui.notify(`Agent is ${record.status === "queued" ? "queued" : "expired"} — no session available.`, "info");
+      return;
+    }
+
+    const { ConversationViewer } = await import("./ui/conversation-viewer.js");
+    const session = record.session;
+    const activity = agentActivity.get(record.id);
+
+    await ctx.ui.custom<undefined>(
+      (tui, theme, _keybindings, done) => {
+        return new ConversationViewer(tui, session, record, activity, theme, done);
+      },
+      {
+        overlay: true,
+        overlayOptions: { anchor: "center", width: "90%" },
+      },
+    );
   }
 
   async function showAgentDetail(ctx: ExtensionCommandContext, name: string) {
