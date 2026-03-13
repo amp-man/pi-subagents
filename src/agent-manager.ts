@@ -11,7 +11,8 @@ import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-age
 import type { Model } from "@mariozechner/pi-ai";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import { runAgent, resumeAgent, type ToolActivity } from "./agent-runner.js";
-import type { SubagentType, AgentRecord, ThinkingLevel } from "./types.js";
+import type { SubagentType, AgentRecord, ThinkingLevel, IsolationMode } from "./types.js";
+import { createWorktree, cleanupWorktree, pruneWorktrees, type WorktreeInfo } from "./worktree.js";
 
 export type OnAgentComplete = (record: AgentRecord) => void;
 export type OnAgentStart = (record: AgentRecord) => void;
@@ -35,6 +36,8 @@ interface SpawnOptions {
   inheritContext?: boolean;
   thinkingLevel?: ThinkingLevel;
   isBackground?: boolean;
+  /** Isolation mode — "worktree" creates a temp git worktree for the agent. */
+  isolation?: IsolationMode;
   /** Called on tool start/end with activity info (for streaming progress to UI). */
   onToolActivity?: (activity: ToolActivity) => void;
   /** Called on streaming text deltas from the assistant response. */
@@ -117,13 +120,30 @@ export class AgentManager {
     if (options.isBackground) this.runningBackground++;
     this.onStart?.(record);
 
-    const promise = runAgent(ctx, type, prompt, {
+    // Worktree isolation: create a temporary git worktree if requested
+    let worktreeCwd: string | undefined;
+    let worktreeWarning = "";
+    if (options.isolation === "worktree") {
+      const wt = createWorktree(ctx.cwd, id);
+      if (wt) {
+        record.worktree = wt;
+        worktreeCwd = wt.path;
+      } else {
+        worktreeWarning = "\n\n[WARNING: Worktree isolation was requested but failed (not a git repo, or no commits yet). Running in the main working directory instead.]";
+      }
+    }
+
+    // Prepend worktree warning to prompt if isolation failed
+    const effectivePrompt = worktreeWarning ? worktreeWarning + "\n\n" + prompt : prompt;
+
+    const promise = runAgent(ctx, type, effectivePrompt, {
       pi,
       model: options.model,
       maxTurns: options.maxTurns,
       isolated: options.isolated,
       inheritContext: options.inheritContext,
       thinkingLevel: options.thinkingLevel,
+      cwd: worktreeCwd,
       signal: record.abortController!.signal,
       onToolActivity: (activity) => {
         if (activity.type === "end") record.toolUses++;
@@ -143,6 +163,17 @@ export class AgentManager {
         record.result = responseText;
         record.session = session;
         record.completedAt ??= Date.now();
+
+        // Clean up worktree if used
+        if (record.worktree) {
+          const wtResult = cleanupWorktree(ctx.cwd, record.worktree, options.description);
+          record.worktreeResult = wtResult;
+          if (wtResult.hasChanges && wtResult.branch) {
+            record.result = (record.result ?? "") +
+              `\n\n---\nChanges saved to branch \`${wtResult.branch}\`. Merge with: \`git merge ${wtResult.branch}\``;
+          }
+        }
+
         if (options.isBackground) {
           this.runningBackground--;
           this.onComplete?.(record);
@@ -157,6 +188,15 @@ export class AgentManager {
         }
         record.error = err instanceof Error ? err.message : String(err);
         record.completedAt ??= Date.now();
+
+        // Best-effort worktree cleanup on error
+        if (record.worktree) {
+          try {
+            const wtResult = cleanupWorktree(ctx.cwd, record.worktree, options.description);
+            record.worktreeResult = wtResult;
+          } catch { /* ignore cleanup errors */ }
+        }
+
         if (options.isBackground) {
           this.runningBackground--;
           this.onComplete?.(record);
@@ -305,5 +345,7 @@ export class AgentManager {
       record.session?.dispose();
     }
     this.agents.clear();
+    // Prune any orphaned git worktrees (crash recovery)
+    try { pruneWorktrees(process.cwd()); } catch { /* ignore */ }
   }
 }

@@ -6,7 +6,7 @@ import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
-import type { AgentConfig, ThinkingLevel } from "./types.js";
+import type { AgentConfig, ThinkingLevel, MemoryScope, IsolationMode } from "./types.js";
 import { BUILTIN_TOOL_NAMES } from "./agent-types.js";
 
 /**
@@ -56,6 +56,7 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
       displayName: str(fm.display_name),
       description: str(fm.description) ?? name,
       builtinToolNames: csvList(fm.tools, BUILTIN_TOOL_NAMES),
+      disallowedTools: csvListOptional(fm.disallowed_tools),
       extensions: inheritField(fm.extensions ?? fm.inherit_extensions),
       skills: inheritField(fm.skills ?? fm.inherit_skills),
       model: str(fm.model),
@@ -66,6 +67,8 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
       inheritContext: fm.inherit_context === true,
       runInBackground: fm.run_in_background === true,
       isolated: fm.isolated === true,
+      memory: parseMemory(fm.memory),
+      isolation: fm.isolation === "worktree" ? "worktree" : undefined,
       enabled: fm.enabled !== false,  // default true; explicitly false disables
       source,
     });
@@ -86,14 +89,40 @@ function positiveInt(val: unknown): number | undefined {
 }
 
 /**
- * Parse a comma-separated list field.
+ * Parse a raw CSV field value into items, or undefined if absent/empty/"none".
+ */
+function parseCsvField(val: unknown): string[] | undefined {
+  if (val === undefined || val === null) return undefined;
+  const s = String(val).trim();
+  if (!s || s === "none") return undefined;
+  const items = s.split(",").map(t => t.trim()).filter(Boolean);
+  return items.length > 0 ? items : undefined;
+}
+
+/**
+ * Parse a comma-separated list field with defaults.
  * omitted → defaults; "none"/empty → []; csv → listed items.
  */
 function csvList(val: unknown, defaults: string[]): string[] {
   if (val === undefined || val === null) return defaults;
-  const s = String(val).trim();
-  if (!s || s === "none") return [];
-  return s.split(",").map(t => t.trim()).filter(Boolean);
+  return parseCsvField(val) ?? [];
+}
+
+/**
+ * Parse an optional comma-separated list field.
+ * omitted → undefined; "none"/empty → undefined; csv → listed items.
+ */
+function csvListOptional(val: unknown): string[] | undefined {
+  return parseCsvField(val);
+}
+
+/**
+ * Parse a memory scope field.
+ * omitted → undefined; "user"/"project"/"local" → MemoryScope.
+ */
+function parseMemory(val: unknown): MemoryScope | undefined {
+  if (val === "user" || val === "project" || val === "local") return val;
+  return undefined;
 }
 
 /**

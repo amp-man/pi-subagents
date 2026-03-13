@@ -109,6 +109,32 @@ export function isValidType(type: string): boolean {
   return agents.get(key)?.enabled !== false;
 }
 
+/** Tool names required for memory management. */
+const MEMORY_TOOL_NAMES = ["read", "write", "edit"];
+
+/**
+ * Get the tools needed for memory management (read, write, edit).
+ * Only returns tools that are NOT already in the provided set.
+ */
+export function getMemoryTools(cwd: string, existingToolNames: Set<string>): AgentTool<any>[] {
+  return MEMORY_TOOL_NAMES
+    .filter(n => !existingToolNames.has(n) && n in TOOL_FACTORIES)
+    .map(n => TOOL_FACTORIES[n](cwd));
+}
+
+/** Tool names needed for read-only memory access. */
+const READONLY_MEMORY_TOOL_NAMES = ["read"];
+
+/**
+ * Get only the read tool for read-only memory access.
+ * Only returns tools that are NOT already in the provided set.
+ */
+export function getReadOnlyMemoryTools(cwd: string, existingToolNames: Set<string>): AgentTool<any>[] {
+  return READONLY_MEMORY_TOOL_NAMES
+    .filter(n => !existingToolNames.has(n) && n in TOOL_FACTORIES)
+    .map(n => TOOL_FACTORIES[n](cwd));
+}
+
 /** Get built-in tools for a type (case-insensitive). */
 export function getToolsForType(type: string, cwd: string): AgentTool<any>[] {
   const key = resolveKey(type);

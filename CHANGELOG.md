@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-03-13
+
+### Added
+- **Persistent agent memory** — new `memory` frontmatter field with three scopes: `"user"` (global `~/.pi/`), `"project"` (per-project `.pi/`), `"local"` (gitignored `.pi/`). Agents with write/edit tools get full read-write memory; read-only agents get a read-only fallback that injects existing MEMORY.md content without granting write access or creating directories.
+- **Git worktree isolation** — new `isolation: "worktree"` frontmatter field and Agent tool parameter. Creates a temporary `git worktree` so agents work on an isolated copy of the repo. On completion, changes are auto-committed to a `pi-agent-<id>` branch; clean worktrees are removed. Includes crash recovery via `pruneWorktrees()`.
+- **Skill preloading** — `skills` frontmatter now accepts a comma-separated list of skill names (e.g. `skills: planning, review`). Reads from `.pi/skills/` (project) then `~/.pi/skills/` (global), tries `.md`/`.txt`/bare extensions. Content injected into the system prompt as `# Preloaded Skill: {name}`.
+- **Tool denylist** — new `disallowed_tools` frontmatter field (e.g. `disallowed_tools: bash, write`). Blocks specified tools even if `builtinToolNames` or extensions would provide them. Enforced for both extension-enabled and extension-disabled agents.
+- **Prompt extras system** — new `PromptExtras` interface in `prompts.ts`; `buildAgentPrompt()` accepts optional memory and skill blocks appended in both `replace` and `append` modes.
+- `getMemoryTools()`, `getReadOnlyMemoryTools()` in `agent-types.ts`.
+- `buildMemoryBlock()`, `buildReadOnlyMemoryBlock()`, `isSymlink()`, `safeReadFile()` in `memory.ts`.
+- `preloadSkills()` in `skill-loader.ts`.
+- `createWorktree()`, `cleanupWorktree()`, `pruneWorktrees()` in `worktree.ts`.
+- `MemoryScope`, `IsolationMode` types; `memory`, `isolation`, `disallowedTools` fields on `AgentConfig`; `worktree`, `worktreeResult` fields on `AgentRecord`.
+- 177 total tests across 8 test files (41 new tests).
+
+### Fixed
+- **Read-only agents no longer escalated to read-write** — enabling `memory` on a read-only agent (e.g. Explore) previously auto-added `write`/`edit` tools. Now the runner detects write capability and branches: read-write agents get full memory tools, read-only agents get read-only memory prompt with only the `read` tool added.
+- **Denylist-aware memory detection** — write capability check now accounts for `disallowedTools`. An agent with `tools: write` + `disallowed_tools: write` correctly gets read-only memory instead of broken read-write instructions.
+- **Worktree requires commits** — repos with no commits (empty HEAD) are now rejected early with a warning instead of failing silently at `git worktree add`.
+- **Worktree failure warning** — when worktree creation fails, a warning is prepended to the agent's prompt instead of silently falling through to the main cwd.
+- **No force-branch overwrite** — worktree cleanup appends a timestamp suffix on branch name conflict instead of using `git branch -f`.
+
+### Security
+- **Whitelist name validation** — agent/skill names must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, max 128 chars. Rejects path traversal, leading dots, spaces, and special characters.
+- **Symlink protection** — `safeReadFile()` and `isSymlink()` reject symlinks in memory directories, MEMORY.md files, and skill files, preventing arbitrary file reads.
+- **Symlink-safe directory creation** — `ensureMemoryDir()` throws on symlinked directories.
+
+### Changed
+- `agent-runner.ts`: tool/extension/skill resolution moved before memory detection; `ctx.cwd` → `effectiveCwd` throughout.
+- `custom-agents.ts`: extracted `parseCsvField()` helper; added `csvListOptional()` and `parseMemory()`.
+- `skill-loader.ts`: uses `safeReadFile()` from `memory.ts` instead of raw `readFileSync`.
+- Agent tool schema updated with `isolation` parameter and help text for `memory`, `isolation`, `disallowed_tools`, and skill list.
+
 ## [0.4.2] - 2026-03-12
 
 ### Added
@@ -209,6 +242,7 @@ Initial release.
 - **Thinking level** — per-agent extended thinking control
 - **`/agent` and `/agents` commands**
 
+[0.4.3]: https://github.com/tintinweb/pi-subagents/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/tintinweb/pi-subagents/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/tintinweb/pi-subagents/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/tintinweb/pi-subagents/compare/v0.3.1...v0.4.0

@@ -408,6 +408,7 @@ Guidelines:
 - Use model to specify a different model (as "provider/modelId", or fuzzy e.g. "haiku", "sonnet").
 - Use thinking to control extended thinking level.
 - Use inherit_context if the agent needs the parent conversation history.
+- Use isolation: "worktree" to run the agent in an isolated git worktree (safe parallel file modifications).
 - Use join_mode to control how background completion notifications are delivered. By default (smart), 2+ background agents spawned in the same turn are grouped into a single notification. Use "async" for individual notifications or "group" to force grouping.`,
     parameters: Type.Object({
       prompt: Type.String({
@@ -454,6 +455,11 @@ Guidelines:
       inherit_context: Type.Optional(
         Type.Boolean({
           description: "If true, fork parent conversation into the agent. Default: false (fresh context).",
+        }),
+      ),
+      isolation: Type.Optional(
+        Type.Literal("worktree", {
+          description: 'Set to "worktree" to run the agent in a temporary git worktree (isolated copy of the repo). Changes are saved to a branch on completion.',
         }),
       ),
       join_mode: Type.Optional(
@@ -590,6 +596,7 @@ Guidelines:
       const inheritContext = params.inherit_context ?? customConfig?.inheritContext ?? false;
       const runInBackground = params.run_in_background ?? customConfig?.runInBackground ?? false;
       const isolated = params.isolated ?? customConfig?.isolated ?? false;
+      const isolation = params.isolation ?? customConfig?.isolation;
 
       // Build display tags for non-default config
       const parentModelId = ctx.model?.id;
@@ -602,6 +609,7 @@ Guidelines:
       if (modeLabel) agentTags.push(modeLabel);
       if (thinking) agentTags.push(`thinking: ${thinking}`);
       if (isolated) agentTags.push("isolated");
+      if (isolation === "worktree") agentTags.push("worktree");
       // Shared base fields for all AgentDetails in this call
       const detailBase = {
         displayName,
@@ -642,6 +650,7 @@ Guidelines:
           inheritContext,
           thinkingLevel: thinking,
           isBackground: true,
+          isolation,
           ...bgCallbacks,
         });
 
@@ -739,6 +748,7 @@ Guidelines:
         isolated,
         inheritContext,
         thinkingLevel: thinking,
+        isolation,
         ...fgCallbacks,
       });
 
@@ -1148,9 +1158,12 @@ Guidelines:
     else if (Array.isArray(cfg.extensions)) fmFields.push(`extensions: ${cfg.extensions.join(", ")}`);
     if (cfg.skills === false) fmFields.push("skills: false");
     else if (Array.isArray(cfg.skills)) fmFields.push(`skills: ${cfg.skills.join(", ")}`);
+    if (cfg.disallowedTools?.length) fmFields.push(`disallowed_tools: ${cfg.disallowedTools.join(", ")}`);
     if (cfg.inheritContext) fmFields.push("inherit_context: true");
     if (cfg.runInBackground) fmFields.push("run_in_background: true");
     if (cfg.isolated) fmFields.push("isolated: true");
+    if (cfg.memory) fmFields.push(`memory: ${cfg.memory}`);
+    if (cfg.isolation) fmFields.push(`isolation: ${cfg.isolation}`);
 
     const content = `---\n${fmFields.join("\n")}\n---\n\n${cfg.systemPrompt}\n`;
 
@@ -1270,10 +1283,13 @@ thinking: <optional thinking level: off, minimal, low, medium, high, xhigh. Omit
 max_turns: <optional max agentic turns, default 50. Omit for default>
 prompt_mode: <"replace" (body IS the full system prompt) or "append" (body is appended to default prompt). Default: replace>
 extensions: <true (inherit all MCP/extension tools), false (none), or comma-separated names. Default: true>
-skills: <true (inherit all), false (none). Default: true>
+skills: <true (inherit all), false (none), or comma-separated skill names to preload into prompt. Default: true>
+disallowed_tools: <comma-separated tool names to block, even if otherwise available. Omit for none>
 inherit_context: <true to fork parent conversation into agent so it sees chat history. Default: false>
 run_in_background: <true to run in background by default. Default: false>
 isolated: <true for no extension/MCP tools, only built-in tools. Default: false>
+memory: <"user" (global), "project" (per-project), or "local" (gitignored per-project) for persistent memory. Omit for none>
+isolation: <"worktree" to run in isolated git worktree. Omit for normal>
 ---
 
 <system prompt body — instructions for the agent>

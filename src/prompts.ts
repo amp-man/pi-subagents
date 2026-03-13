@@ -4,6 +4,14 @@
 
 import type { AgentConfig, EnvInfo } from "./types.js";
 
+/** Extra sections to inject into the system prompt (memory, skills, etc.). */
+export interface PromptExtras {
+  /** Persistent memory content to inject (first 200 lines of MEMORY.md + instructions). */
+  memoryBlock?: string;
+  /** Preloaded skill contents to inject. */
+  skillBlocks?: { name: string; content: string }[];
+}
+
 /**
  * Build the system prompt for an agent from its config.
  *
@@ -12,17 +20,31 @@ import type { AgentConfig, EnvInfo } from "./types.js";
  * - "append" with empty systemPrompt: pure parent clone
  *
  * @param parentSystemPrompt  The parent agent's effective system prompt (for append mode).
+ * @param extras  Optional extra sections to inject (memory, preloaded skills).
  */
 export function buildAgentPrompt(
   config: AgentConfig,
   cwd: string,
   env: EnvInfo,
   parentSystemPrompt?: string,
+  extras?: PromptExtras,
 ): string {
   const envBlock = `# Environment
 Working directory: ${cwd}
 ${env.isGitRepo ? `Git repository: yes\nBranch: ${env.branch}` : "Not a git repository"}
 Platform: ${env.platform}`;
+
+  // Build optional extras suffix
+  const extraSections: string[] = [];
+  if (extras?.memoryBlock) {
+    extraSections.push(extras.memoryBlock);
+  }
+  if (extras?.skillBlocks?.length) {
+    for (const skill of extras.skillBlocks) {
+      extraSections.push(`\n# Preloaded Skill: ${skill.name}\n${skill.content}`);
+    }
+  }
+  const extrasSuffix = extraSections.length > 0 ? "\n\n" + extraSections.join("\n") : "";
 
   if (config.promptMode === "append") {
     const identity = parentSystemPrompt || genericBase;
@@ -44,7 +66,7 @@ You are operating as a sub-agent invoked to handle a specific task.
       ? `\n\n<agent_instructions>\n${config.systemPrompt}\n</agent_instructions>`
       : "";
 
-    return envBlock + "\n\n<inherited_system_prompt>\n" + identity + "\n</inherited_system_prompt>\n\n" + bridge + customSection;
+    return envBlock + "\n\n<inherited_system_prompt>\n" + identity + "\n</inherited_system_prompt>\n\n" + bridge + customSection + extrasSuffix;
   }
 
   // "replace" mode — env header + the config's full system prompt
@@ -53,7 +75,7 @@ You have been invoked to handle a specific task autonomously.
 
 ${envBlock}`;
 
-  return replaceHeader + "\n\n" + config.systemPrompt;
+  return replaceHeader + "\n\n" + config.systemPrompt + extrasSuffix;
 }
 
 /** Fallback base prompt when parent system prompt is unavailable in append mode. */

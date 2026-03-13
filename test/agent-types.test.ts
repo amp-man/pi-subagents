@@ -9,6 +9,8 @@ import {
   resolveType,
   getConfig,
   getToolsForType,
+  getMemoryTools,
+  getReadOnlyMemoryTools,
   BUILTIN_TOOL_NAMES,
 } from "../src/agent-types.js";
 import type { AgentConfig } from "../src/types.js";
@@ -239,6 +241,41 @@ describe("agent type registry", () => {
       // getConfig fallback should still return something reasonable
       const config = getConfig("general-purpose");
       expect(config.displayName).toBe("Agent");
+    });
+  });
+
+  describe("getMemoryTools", () => {
+    it("returns read, write, edit when none exist", () => {
+      const tools = getMemoryTools("/tmp", new Set());
+      const names = tools.map(t => t.name);
+      expect(names).toContain("read");
+      expect(names).toContain("write");
+      expect(names).toContain("edit");
+      expect(names).toHaveLength(3);
+    });
+
+    it("skips tools that already exist", () => {
+      const tools = getMemoryTools("/tmp", new Set(["read", "edit"]));
+      const names = tools.map(t => t.name);
+      expect(names).toEqual(["write"]);
+    });
+
+    it("returns empty when all memory tools already exist", () => {
+      const tools = getMemoryTools("/tmp", new Set(["read", "write", "edit"]));
+      expect(tools).toHaveLength(0);
+    });
+  });
+
+  describe("getReadOnlyMemoryTools", () => {
+    it("returns only read when missing", () => {
+      const tools = getReadOnlyMemoryTools("/tmp", new Set());
+      const names = tools.map(t => t.name);
+      expect(names).toEqual(["read"]);
+    });
+
+    it("returns empty when read already exists", () => {
+      const tools = getReadOnlyMemoryTools("/tmp", new Set(["read"]));
+      expect(tools).toHaveLength(0);
     });
   });
 });

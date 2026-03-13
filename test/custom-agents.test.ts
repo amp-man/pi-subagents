@@ -328,4 +328,107 @@ Agent prompt.`);
     const result = loadCustomAgents(tmpDir);
     expect(result.get("myagent")!.displayName).toBe("MyAgent");
   });
+
+  it("parses disallowed_tools as csv list", () => {
+    writeAgent("restricted", `---
+description: Restricted Agent
+disallowed_tools: bash, write
+---
+
+No bash or write.`);
+
+    const result = loadCustomAgents(tmpDir);
+    const agent = result.get("restricted")!;
+    expect(agent.disallowedTools).toEqual(["bash", "write"]);
+  });
+
+  it("disallowed_tools defaults to undefined when omitted", () => {
+    writeAgent("unrestricted", `---
+description: Unrestricted
+---
+
+All tools.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("unrestricted")!.disallowedTools).toBeUndefined();
+  });
+
+  it("parses memory scope", () => {
+    writeAgent("rememberer", `---
+description: Agent with memory
+memory: project
+---
+
+Remember things.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("rememberer")!.memory).toBe("project");
+  });
+
+  it("parses memory: user scope", () => {
+    writeAgent("global-mem", `---
+memory: user
+---
+
+User memory.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("global-mem")!.memory).toBe("user");
+  });
+
+  it("memory defaults to undefined when omitted", () => {
+    writeAgent("no-mem", `---
+description: No memory
+---
+
+Stateless.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("no-mem")!.memory).toBeUndefined();
+  });
+
+  it("rejects invalid memory scope", () => {
+    writeAgent("bad-mem", `---
+memory: invalid
+---
+
+Bad memory.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("bad-mem")!.memory).toBeUndefined();
+  });
+
+  it("parses isolation: worktree", () => {
+    writeAgent("isolated-wt", `---
+description: Worktree agent
+isolation: worktree
+---
+
+Isolated.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("isolated-wt")!.isolation).toBe("worktree");
+  });
+
+  it("isolation defaults to undefined when omitted", () => {
+    writeAgent("no-isolation", `---
+description: Normal
+---
+
+Normal.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("no-isolation")!.isolation).toBeUndefined();
+  });
+
+  it("rejects invalid isolation mode", () => {
+    writeAgent("bad-isolation", `---
+isolation: docker
+---
+
+Bad isolation.`);
+
+    const result = loadCustomAgents(tmpDir);
+    expect(result.get("bad-isolation")!.isolation).toBeUndefined();
+  });
 });

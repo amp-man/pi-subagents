@@ -13,12 +13,20 @@ export type SubagentType = string;
 /** Names of the three embedded default agents. */
 export const DEFAULT_AGENT_NAMES = ["general-purpose", "Explore", "Plan"] as const;
 
+/** Memory scope for persistent agent memory. */
+export type MemoryScope = "user" | "project" | "local";
+
+/** Isolation mode for agent execution. */
+export type IsolationMode = "worktree";
+
 /** Unified agent configuration — used for both default and user-defined agents. */
 export interface AgentConfig {
   name: string;
   displayName?: string;
   description: string;
   builtinToolNames?: string[];
+  /** Tool denylist — these tools are removed even if `builtinToolNames` or extensions include them. */
+  disallowedTools?: string[];
   /** true = inherit all, string[] = only listed, false = none */
   extensions: true | string[] | false;
   /** true = inherit all, string[] = only listed, false = none */
@@ -34,6 +42,10 @@ export interface AgentConfig {
   runInBackground: boolean;
   /** Default for spawn: no extension tools */
   isolated: boolean;
+  /** Persistent memory scope — agents with memory get a persistent directory and MEMORY.md */
+  memory?: MemoryScope;
+  /** Isolation mode — "worktree" runs the agent in a temporary git worktree */
+  isolation?: IsolationMode;
   /** true = this is an embedded default agent (informational) */
   isDefault?: boolean;
   /** false = agent is hidden from the registry */
@@ -61,6 +73,10 @@ export interface AgentRecord {
   joinMode?: JoinMode;
   /** Set when result was already consumed via get_subagent_result — suppresses completion notification. */
   resultConsumed?: boolean;
+  /** Worktree info if the agent is running in an isolated worktree. */
+  worktree?: { path: string; branch: string };
+  /** Worktree cleanup result after agent completion. */
+  worktreeResult?: { hasChanges: boolean; branch?: string };
 }
 
 export interface EnvInfo {
