@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.8] - 2026-03-18
 
+### Added
+- **Cross-extension RPC** — other pi extensions can spawn subagents via `pi.events` event bus (`subagents:rpc:ping`, `subagents:rpc:spawn`). Emits `subagents:ready` on load.
+- **Session persistence for agent records** — completed agent records are persisted via `pi.appendEntry("subagents:record", ...)` for cross-extension history reconstruction.
+
 ### Fixed
 - **Background agent notification race condition** — `pi.sendMessage()` is fire-and-forget, so completion notifications sent eagerly from `onComplete` could not be retracted when `get_subagent_result` was called in the same turn. Notifications are now held behind a 200ms cancellable timer; `get_subagent_result` cancels the pending timer before it fires, eliminating duplicate notifications. Group notifications also re-check `resultConsumed` at send time so consumed agents are filtered out.
 

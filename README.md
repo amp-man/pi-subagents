@@ -29,6 +29,7 @@ https://github.com/user-attachments/assets/8685261b-9338-4fea-8dfe-1c590d5df543
 - **Tool denylist** — block specific tools via `disallowed_tools` frontmatter
 - **Styled completion notifications** — background agent results render as themed, compact notification boxes (icon, stats, result preview) instead of raw XML. Expandable to show full output. Group completions render each agent individually
 - **Event bus** — lifecycle events (`subagents:created`, `started`, `completed`, `failed`, `steered`) emitted via `pi.events`, enabling other extensions to react to sub-agent activity
+- **Cross-extension RPC** — other pi extensions can spawn subagents via the `pi.events` event bus (`subagents:rpc:ping`, `subagents:rpc:spawn`). Emits `subagents:ready` on load
 
 ## Install
 
@@ -284,6 +285,58 @@ Agent lifecycle events are emitted via `pi.events.emit()` so other extensions ca
 | `subagents:completed` | Agent finished successfully | `id`, `type`, `durationMs`, `tokens`, `toolUses`, `result` |
 | `subagents:failed` | Agent errored, stopped, or aborted | same as completed + `error`, `status` |
 | `subagents:steered` | Steering message sent | `id`, `message` |
+| `subagents:ready` | Extension loaded and RPC handlers registered | — |
+
+## Cross-Extension RPC
+
+Other pi extensions can spawn subagents programmatically via the `pi.events` event bus, without importing this package directly.
+
+### Discovery
+
+Listen for `subagents:ready` to know when RPC handlers are available:
+
+```typescript
+pi.events.on("subagents:ready", () => {
+  // RPC handlers are registered — safe to call ping/spawn
+});
+```
+
+### Ping
+
+Check if the subagents extension is loaded:
+
+```typescript
+const requestId = crypto.randomUUID();
+const unsub = pi.events.on(`subagents:rpc:ping:reply:${requestId}`, () => {
+  unsub();
+  // Extension is alive
+});
+pi.events.emit("subagents:rpc:ping", { requestId });
+```
+
+### Spawn
+
+Spawn a subagent and receive its ID:
+
+```typescript
+const requestId = crypto.randomUUID();
+const unsub = pi.events.on(`subagents:rpc:spawn:reply:${requestId}`, (reply) => {
+  unsub();
+  if (reply.error) {
+    console.error("Spawn failed:", reply.error);
+  } else {
+    console.log("Agent ID:", reply.id);
+  }
+});
+pi.events.emit("subagents:rpc:spawn", {
+  requestId,
+  type: "general-purpose",
+  prompt: "Do something useful",
+  options: { description: "My task", run_in_background: true },
+});
+```
+
+Reply channels are scoped per `requestId`, so concurrent requests don't interfere.
 
 ## Persistent Agent Memory
 
@@ -354,6 +407,7 @@ src/
   agent-types.ts      # Unified agent registry (defaults + user), tool factories
   agent-runner.ts     # Session creation, execution, graceful max_turns, steer/resume
   agent-manager.ts    # Agent lifecycle, concurrency queue, completion notifications
+  cross-extension-rpc.ts # RPC handlers for cross-extension spawn/ping via pi.events
   group-join.ts       # Group join manager: batched completion notifications with timeout
   custom-agents.ts    # Load user-defined agents from .pi/agents/*.md
   memory.ts           # Persistent agent memory (resolve, read, build prompt blocks)
