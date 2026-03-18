@@ -93,6 +93,8 @@ export interface NotificationDetails {
   description: string;
   status: string;
   toolUses: number;
+  turnCount: number;
+  maxTurns?: number;
   totalTokens: number;
   durationMs: number;
   outputFile?: string;

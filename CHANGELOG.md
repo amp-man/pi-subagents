@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.10] - 2026-03-18
+
+### Changed
+- **Default max turns is now unlimited** — subagents no longer have a 50-turn default cap. The default is unlimited (no turn limit), matching Claude Code's main loop behavior. Users can still set explicit limits per-agent via `max_turns` frontmatter or the Agent tool parameter, or globally via `/agents` → Settings (`0` = unlimited).
+- **Live turn counter** — all agents now show a live turn count in the widget, inline result, and completion notification. With a turn limit: `⟳5≤30` (5 of 30 turns). Without: `⟳5`. Updates in real time as turns progress.
+
 ## [0.4.9] - 2026-03-18
 
 ### Fixed

@@ -64,9 +64,9 @@ The extension renders a persistent widget above the editor showing all active ag
 
 ```
 ● Agents
-├─ ⠹ Agent  Refactor auth module · 5 tool uses · 33.8k token · 12.3s
+├─ ⠹ Agent  Refactor auth module · ⟳5≤30 · 5 tool uses · 33.8k token · 12.3s
 │    ⎿  editing 2 files…
-├─ ⠹ Explore  Find auth files · 3 tool uses · 12.4k token · 4.1s
+├─ ⠹ Explore  Find auth files · ⟳3 · 3 tool uses · 12.4k token · 4.1s
 │    ⎿  searching…
 └─ 2 queued
 ```
@@ -75,12 +75,12 @@ Individual agent results render Claude Code-style in the conversation:
 
 | State | Example |
 |-------|---------|
-| **Running** | `⠹ 3 tool uses · 12.4k token` / `⎿ searching, reading 3 files…` |
-| **Completed** | `✓ 5 tool uses · 33.8k token · 12.3s` / `⎿ Done` |
-| **Wrapped up** | `✓ 50 tool uses · 89.1k token · 45.2s` / `⎿ Wrapped up (turn limit)` |
-| **Stopped** | `■ 3 tool uses · 12.4k token` / `⎿ Stopped` |
-| **Error** | `✗ 3 tool uses · 12.4k token` / `⎿ Error: timeout` |
-| **Aborted** | `✗ 55 tool uses · 102.3k token` / `⎿ Aborted (max turns exceeded)` |
+| **Running** | `⠹ ⟳3≤30 · 3 tool uses · 12.4k token` / `⎿ searching, reading 3 files…` |
+| **Completed** | `✓ ⟳8 · 5 tool uses · 33.8k token · 12.3s` / `⎿ Done` |
+| **Wrapped up** | `✓ ⟳50≤50 · 50 tool uses · 89.1k token · 45.2s` / `⎿ Wrapped up (turn limit)` |
+| **Stopped** | `■ ⟳3 · 3 tool uses · 12.4k token` / `⎿ Stopped` |
+| **Error** | `✗ ⟳3 · 3 tool uses · 12.4k token` / `⎿ Error: timeout` |
+| **Aborted** | `✗ ⟳55≤50 · 55 tool uses · 102.3k token` / `⎿ Aborted (max turns exceeded)` |
 
 Completed results can be expanded (ctrl+o in pi) to show the full agent output inline.
 
@@ -88,7 +88,7 @@ Background agent completion notifications render as styled boxes:
 
 ```
 ✓ Find auth files completed
-  3 tool uses · 12.4k token · 4.1s
+  ⟳3 · 3 tool uses · 12.4k token · 4.1s
   ⎿  Found 5 files related to authentication...
   transcript: .pi/output/agent-abc123.jsonl
 ```
@@ -162,7 +162,7 @@ All fields are optional — sensible defaults for everything.
 | `isolation` | — | Set to `worktree` to run in an isolated git worktree |
 | `model` | inherit parent | Model — `provider/modelId` or fuzzy name (`"haiku"`, `"sonnet"`) |
 | `thinking` | inherit | off, minimal, low, medium, high, xhigh |
-| `max_turns` | 50 | Max agentic turns before graceful shutdown |
+| `max_turns` | unlimited | Max agentic turns before graceful shutdown. `0` or omit for unlimited |
 | `prompt_mode` | `replace` | `replace`: body is the full system prompt. `append`: body appended to parent's prompt (agent acts as a "parent twin" with optional extra instructions) |
 | `inherit_context` | `false` | Fork parent conversation into agent |
 | `run_in_background` | `false` | Run in background by default |
@@ -185,7 +185,7 @@ Launch a sub-agent.
 | `subagent_type` | string | yes | Agent type (built-in or custom) |
 | `model` | string | no | Model — `provider/modelId` or fuzzy name (`"haiku"`, `"sonnet"`) |
 | `thinking` | string | no | Thinking level: off, minimal, low, medium, high, xhigh |
-| `max_turns` | number | no | Max agentic turns (default: 50) |
+| `max_turns` | number | no | Max agentic turns. Omit for unlimited (default) |
 | `run_in_background` | boolean | no | Run without blocking |
 | `resume` | string | no | Agent ID to resume a previous session |
 | `isolated` | boolean | no | No extension/MCP tools |

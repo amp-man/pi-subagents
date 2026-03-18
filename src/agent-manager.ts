@@ -44,6 +44,8 @@ interface SpawnOptions {
   onTextDelta?: (delta: string, fullText: string) => void;
   /** Called when the agent session is created (for accessing session stats). */
   onSessionCreated?: (session: AgentSession) => void;
+  /** Called at the end of each agentic turn with the cumulative count. */
+  onTurnEnd?: (turnCount: number) => void;
 }
 
 export class AgentManager {
@@ -149,6 +151,7 @@ export class AgentManager {
         if (activity.type === "end") record.toolUses++;
         options.onToolActivity?.(activity);
       },
+      onTurnEnd: options.onTurnEnd,
       onTextDelta: options.onTextDelta,
       onSessionCreated: (session) => {
         record.session = session;
