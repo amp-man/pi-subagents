@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
 import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { detectEnv } from "../src/env.js";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { describe, expect, it } from "vitest";
+import { detectEnv } from "../src/env.js";
 
 /** Minimal mock of pi.exec() that shells out via child_process. */
 function mockPi(): ExtensionAPI {
