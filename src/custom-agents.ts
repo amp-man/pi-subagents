@@ -67,6 +67,7 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
       inheritContext: fm.inherit_context === true,
       runInBackground: fm.run_in_background === true,
       isolated: fm.isolated === true,
+      allowNesting: fm.allow_nesting === true,
       memory: parseMemory(fm.memory),
       isolation: fm.isolation === "worktree" ? "worktree" : undefined,
       enabled: fm.enabled !== false,  // default true; explicitly false disables

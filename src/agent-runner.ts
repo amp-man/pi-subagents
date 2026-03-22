@@ -260,7 +260,7 @@ export async function runAgent(
   if (extensions !== false) {
     const builtinToolNames = new Set(tools.map(t => t.name));
     const activeTools = session.getActiveToolNames().filter((t) => {
-      if (EXCLUDED_TOOL_NAMES.includes(t)) return false;
+      if (!agentConfig?.allowNesting && EXCLUDED_TOOL_NAMES.includes(t)) return false;
       if (disallowedSet?.has(t)) return false;
       if (builtinToolNames.has(t)) return true;
       if (Array.isArray(extensions)) {

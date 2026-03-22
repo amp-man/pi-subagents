@@ -46,6 +46,8 @@ export interface AgentConfig {
   memory?: MemoryScope;
   /** Isolation mode — "worktree" runs the agent in a temporary git worktree */
   isolation?: IsolationMode;
+  /** Allow this agent to spawn sub-agents (Agent, get_subagent_result, steer_subagent tools). Default: false. */
+  allowNesting?: boolean;
   /** true = this is an embedded default agent (informational) */
   isDefault?: boolean;
   /** false = agent is hidden from the registry */
