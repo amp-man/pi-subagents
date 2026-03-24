@@ -46,13 +46,13 @@ export function getGraceTurns(): number { return graceTurns; }
 /** Set the grace turns value (minimum 1). */
 export function setGraceTurns(n: number): void { graceTurns = Math.max(1, n); }
 
-/** Allow main conversation to use get_subagent_result({ wait: true }). */
-let allowWait = false;
+/** Allow main conversation to use blocking subagent calls. */
+let allowBlocking = false;
 
-/** Get whether wait is allowed for the main conversation. */
-export function getAllowWait(): boolean { return allowWait; }
-/** Set whether wait is allowed for the main conversation. */
-export function setAllowWait(b: boolean): void { allowWait = b; }
+/** Get whether blocking is allowed for the main conversation. */
+export function getAllowBlocking(): boolean { return allowBlocking; }
+/** Set whether blocking is allowed for the main conversation. */
+export function setAllowBlocking(b: boolean): void { allowBlocking = b; }
 
 /**
  * Try to find the right model for an agent type.

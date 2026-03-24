@@ -1,8 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setAllowWait } from "../src/agent-runner.js";
+import { setAllowBlocking } from "../src/agent-runner.js";
 
-const { records } = vi.hoisted(() => ({
+const { records, spawnMock, spawnAndWaitMock } = vi.hoisted(() => ({
   records: new Map<string, any>(),
+  spawnMock: vi.fn(() => "mock-agent-id"),
+  spawnAndWaitMock: vi.fn(async () => ({
+    id: "mock-agent-id",
+    type: "general-purpose",
+    description: "test",
+    status: "completed",
+    toolUses: 0,
+    startedAt: Date.now(),
+    completedAt: Date.now(),
+    result: "done",
+  })),
 }));
 
 vi.mock("../src/agent-manager.js", () => {
@@ -23,8 +34,12 @@ vi.mock("../src/agent-manager.js", () => {
       return false;
     }
 
-    spawn() {
-      return "mock-agent-id";
+    spawn(...args: any[]) {
+      return spawnMock(...args);
+    }
+
+    spawnAndWait(...args: any[]) {
+      return spawnAndWaitMock(...args);
     }
 
     clearCompleted() {}
@@ -78,19 +93,51 @@ function createRunningRecord(id: string) {
   return { record, resolvePromise: resolvePromise! };
 }
 
-describe("get_subagent_result wait guard", () => {
+function createAgentToolCtx(sessionFile: string) {
+  return {
+    ui: {},
+    cwd: process.cwd(),
+    model: undefined,
+    modelRegistry: { getAvailable: () => [], getAll: () => [] },
+    sessionManager: {
+      getSessionFile: () => sessionFile,
+      getSessionId: () => "session-id",
+    },
+  };
+}
+
+describe("wait toggle guards", () => {
   let getSubagentResultTool: any;
+  let agentTool: any;
 
   beforeEach(() => {
     records.clear();
-    setAllowWait(false);
+    setAllowBlocking(false);
     getSubagentResultTool = undefined;
+    agentTool = undefined;
+
+    spawnMock.mockReset();
+    spawnMock.mockReturnValue("mock-agent-id");
+    spawnAndWaitMock.mockReset();
+    spawnAndWaitMock.mockResolvedValue({
+      id: "mock-agent-id",
+      type: "general-purpose",
+      description: "test",
+      status: "completed",
+      toolUses: 0,
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+      result: "done",
+    });
 
     const pi: any = {
       registerMessageRenderer: vi.fn(),
       registerTool: vi.fn((tool: any) => {
         if (tool.name === "get_subagent_result") {
           getSubagentResultTool = tool;
+        }
+        if (tool.name === "Agent") {
+          agentTool = tool;
         }
       }),
       registerCommand: vi.fn(),
@@ -127,12 +174,37 @@ describe("get_subagent_result wait guard", () => {
     );
 
     expect(result.content[0].text).toBe(
-      "The wait option is disabled for the main conversation to prevent blocking. Use wait: false and rely on asynchronous notifications. (You can enable it in /agents -> Settings).",
+      "Blocked: wait is disabled for the main conversation. Use wait: false or enable blocking in /agents -> Settings.",
+    );
+  });
+
+  it("blocks wait=true for agent/sessions main conversation paths", async () => {
+    records.set("agent-1b", {
+      id: "agent-1b",
+      type: "general-purpose",
+      description: "test",
+      status: "completed",
+      toolUses: 0,
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+      result: "done",
+    });
+
+    const result = await getSubagentResultTool.execute(
+      "tool-call-id",
+      { agent_id: "agent-1b", wait: true },
+      undefined,
+      undefined,
+      { sessionManager: { getSessionFile: () => "/Users/ludwig/agent/sessions/main-session.json" } },
+    );
+
+    expect(result.content[0].text).toBe(
+      "Blocked: wait is disabled for the main conversation. Use wait: false or enable blocking in /agents -> Settings.",
     );
   });
 
   it("allows wait=true in the main conversation when enabled", async () => {
-    setAllowWait(true);
+    setAllowBlocking(true);
     const { record, resolvePromise } = createRunningRecord("agent-2");
     records.set("agent-2", record);
 
@@ -176,5 +248,81 @@ describe("get_subagent_result wait guard", () => {
     const result = await execPromise;
 
     expect(result.content[0].text).toContain("done");
+  });
+
+  it("does not block wait=true for temp agent/sessions paths", async () => {
+    const { record, resolvePromise } = createRunningRecord("agent-4");
+    records.set("agent-4", record);
+
+    const execPromise = getSubagentResultTool.execute(
+      "tool-call-id",
+      { agent_id: "agent-4", wait: true },
+      undefined,
+      undefined,
+      { sessionManager: { getSessionFile: () => "/var/tmp/agent/sessions/subagent-session.json" } },
+    );
+
+    resolvePromise();
+    const result = await execPromise;
+
+    expect(result.content[0].text).toContain("done");
+  });
+
+  it("blocks foreground Agent calls in the main conversation by default", async () => {
+    const result = await agentTool.execute(
+      "tool-call-id",
+      {
+        prompt: "Do work",
+        description: "test",
+        subagent_type: "general-purpose",
+        run_in_background: false,
+      },
+      undefined,
+      undefined,
+      createAgentToolCtx(".pi/sessions/main-session.json"),
+    );
+
+    expect(result.content[0].text).toBe(
+      "Blocked: foreground agent execution is disabled for the main conversation. Use run_in_background: true or enable blocking in /agents -> Settings.",
+    );
+    expect(spawnAndWaitMock).not.toHaveBeenCalled();
+  });
+
+  it("does not block background Agent calls in the main conversation", async () => {
+    const result = await agentTool.execute(
+      "tool-call-id",
+      {
+        prompt: "Do work",
+        description: "test",
+        subagent_type: "general-purpose",
+        run_in_background: true,
+      },
+      undefined,
+      undefined,
+      createAgentToolCtx(".pi/sessions/main-session.json"),
+    );
+
+    expect(result.content[0].text).toContain("Agent started in background.");
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows foreground Agent calls in the main conversation when enabled", async () => {
+    setAllowBlocking(true);
+
+    const result = await agentTool.execute(
+      "tool-call-id",
+      {
+        prompt: "Do work",
+        description: "test",
+        subagent_type: "general-purpose",
+        run_in_background: false,
+      },
+      undefined,
+      undefined,
+      createAgentToolCtx(".pi/sessions/main-session.json"),
+    );
+
+    expect(spawnAndWaitMock).toHaveBeenCalledTimes(1);
+    expect(result.content[0].text).toContain("Agent completed in");
   });
 });

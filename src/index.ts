@@ -19,11 +19,11 @@ import { Type } from "@sinclair/typebox";
 import { AgentManager } from "./agent-manager.js";
 import {
   getAgentConversation,
-  getAllowWait,
+  getAllowBlocking,
   getDefaultMaxTurns,
   getGraceTurns,
   normalizeMaxTurns,
-  setAllowWait,
+  setAllowBlocking,
   setDefaultMaxTurns,
   setGraceTurns,
   steerAgent,
@@ -79,7 +79,10 @@ function isMainConversationSession(sessionFile: string | undefined): boolean {
   if (!sessionFile) return false;
   const normalized = sessionFile.replaceAll("\\", "/");
   const isSubagent = normalized.includes(".pi/agent/sessions/");
-  return normalized.includes(".pi/sessions/") && !isSubagent;
+  const isClassicMain = normalized.includes(".pi/sessions/");
+  const isHarnessMain = /(^|\/)agent\/sessions\//.test(normalized);
+  const isSystemTemp = normalized.includes("/tmp/") || normalized.includes("/var/tmp/") || normalized.includes("/var/folders/");
+  return !isSubagent && !isSystemTemp && (isClassicMain || isHarnessMain);
 }
 
 /**
@@ -785,6 +788,11 @@ Guidelines:
       const isolated = resolvedConfig.isolated;
       const isolation = resolvedConfig.isolation;
 
+      const sessionFile = ctx.sessionManager.getSessionFile?.();
+      const isMainConversation = isMainConversationSession(sessionFile);
+      if (isMainConversation && !runInBackground && !getAllowBlocking()) {
+        return textResult("Blocked: foreground agent execution is disabled for the main conversation. Use run_in_background: true or enable blocking in /agents -> Settings.");
+      }
       // Build display tags for non-default config
       const parentModelId = ctx.model?.id;
       const effectiveModelId = model?.id;
@@ -1024,8 +1032,8 @@ Guidelines:
 
       const sessionFile = ctx.sessionManager.getSessionFile?.();
       const isMainConversation = isMainConversationSession(sessionFile);
-      if (params.wait && isMainConversation && !getAllowWait()) {
-        return textResult("The wait option is disabled for the main conversation to prevent blocking. Use wait: false and rely on asynchronous notifications. (You can enable it in /agents -> Settings).");
+      if (params.wait && isMainConversation && !getAllowBlocking()) {
+        return textResult("Blocked: wait is disabled for the main conversation. Use wait: false or enable blocking in /agents -> Settings.");
       }
 
       // Wait for completion if requested.
@@ -1645,7 +1653,7 @@ ${systemPrompt}
       `Default max turns (current: ${getDefaultMaxTurns() ?? "unlimited"})`,
       `Grace turns (current: ${getGraceTurns()})`,
       `Join mode (current: ${getDefaultJoinMode()})`,
-      `Allow main conversation wait (current: ${getAllowWait()})`,
+      `Allow main conversation blocking (current: ${getAllowBlocking()})`,
     ]);
     if (!choice) return;
 
@@ -1696,10 +1704,10 @@ ${systemPrompt}
         setDefaultJoinMode(mode);
         ctx.ui.notify(`Default join mode set to ${mode}`, "info");
       }
-    } else if (choice.startsWith("Allow main conversation wait")) {
-      const next = !getAllowWait();
-      setAllowWait(next);
-      ctx.ui.notify(`Allow main conversation wait set to ${next}`, "info");
+    } else if (choice.startsWith("Allow main conversation blocking")) {
+      const next = !getAllowBlocking();
+      setAllowBlocking(next);
+      ctx.ui.notify(`Allow main conversation blocking set to ${next}`, "info");
     }
   }
 
