@@ -200,9 +200,10 @@ Check status and retrieve results from a background agent.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `agent_id` | string | yes | Agent ID to check |
-| `wait` | boolean | no | Wait for completion |
+| `wait` | boolean | no | Wait for completion (disabled by default in the main conversation) |
 | `verbose` | boolean | no | Include full conversation log |
 
+`wait: true` is blocked by default for the **main conversation** to prevent self-blocking. Nested subagents can still use `wait: true`. You can enable main-conversation waiting in `/agents` → Settings (`Allow main conversation wait`).
 ### `steer_subagent`
 
 Send a steering message to a running agent. The message interrupts after the current tool execution.
@@ -224,7 +225,7 @@ The `/agents` command opens an interactive menu:
 Running agents (2) — 1 running, 1 done     ← only shown when agents exist
 Agent types (6)                             ← unified list: defaults + custom
 Create new agent                            ← manual wizard or AI-generated
-Settings                                    ← max concurrency, max turns, grace turns, join mode
+Settings                                    ← max concurrency, max turns, grace turns, join mode, main wait toggle
 ```
 
 - **Agent types** — unified list with source indicators: `•` (project), `◦` (global), `✕` (disabled). Select an agent to manage it:
@@ -235,7 +236,7 @@ Settings                                    ← max concurrency, max turns, grac
 - **Eject** — writes the embedded default config as a `.md` file to project or personal location, so you can customize it
 - **Disable/Enable** — toggle agent availability. Disabled agents stay visible in the list (marked `✕`) and can be re-enabled
 - **Create new agent** — choose project/personal location, then manual wizard (step-by-step prompts for name, tools, model, thinking, system prompt) or AI-generated (describe what the agent should do and a sub-agent writes the `.md` file). Any name is allowed, including default agent names (overrides them)
-- **Settings** — configure max concurrency, default max turns, grace turns, and join mode at runtime
+- **Settings** — configure max concurrency, default max turns, grace turns, join mode, and whether the main conversation may use `wait: true`
 
 ## Graceful Max Turns
 

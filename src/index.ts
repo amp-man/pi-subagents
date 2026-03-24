@@ -17,7 +17,16 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@m
 import { Text, truncateToWidth } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { AgentManager } from "./agent-manager.js";
-import { getAgentConversation, getDefaultMaxTurns, getGraceTurns, setDefaultMaxTurns, setGraceTurns, steerAgent } from "./agent-runner.js";
+import {
+  getAgentConversation,
+  getAllowWait,
+  getDefaultMaxTurns,
+  getGraceTurns,
+  setAllowWait,
+  setDefaultMaxTurns,
+  setGraceTurns,
+  steerAgent,
+} from "./agent-runner.js";
 import { BUILTIN_TOOL_NAMES, getAgentConfig, getAllTypes, getAvailableTypes, getDefaultAgentNames, getUserAgentNames, registerAgents, resolveType } from "./agent-types.js";
 import { registerRpcHandlers } from "./cross-extension-rpc.js";
 import { loadCustomAgents } from "./custom-agents.js";
@@ -62,6 +71,13 @@ function truncateRenderedLines(text: string): string {
     .split("\n")
     .map(line => truncateToWidth(line, width))
     .join("\n");
+}
+
+function isMainConversationSession(sessionFile: string | undefined): boolean {
+  if (!sessionFile) return false;
+  const normalized = sessionFile.replaceAll("\\", "/");
+  const isSubagent = normalized.includes(".pi/agent/sessions/");
+  return normalized.includes(".pi/sessions/") && !isSubagent;
 }
 
 /**
@@ -1006,10 +1022,16 @@ Guidelines:
         }),
       ),
     }),
-    execute: async (_toolCallId, params, _signal, _onUpdate, _ctx) => {
+    execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const record = manager.getRecord(params.agent_id);
       if (!record) {
         return textResult(`Agent not found: "${params.agent_id}". It may have been cleaned up.`);
+      }
+
+      const sessionFile = ctx.sessionManager.getSessionFile?.();
+      const isMainConversation = isMainConversationSession(sessionFile);
+      if (params.wait && isMainConversation && !getAllowWait()) {
+        return textResult("The wait option is disabled for the main conversation to prevent blocking. Use wait: false and rely on asynchronous notifications. (You can enable it in /agents -> Settings).");
       }
 
       // Wait for completion if requested.
@@ -1629,6 +1651,7 @@ ${systemPrompt}
       `Default max turns (current: ${getDefaultMaxTurns() ?? "unlimited"})`,
       `Grace turns (current: ${getGraceTurns()})`,
       `Join mode (current: ${getDefaultJoinMode()})`,
+      `Allow main conversation wait (current: ${getAllowWait()})`,
     ]);
     if (!choice) return;
 
@@ -1679,6 +1702,10 @@ ${systemPrompt}
         setDefaultJoinMode(mode);
         ctx.ui.notify(`Default join mode set to ${mode}`, "info");
       }
+    } else if (choice.startsWith("Allow main conversation wait")) {
+      const next = !getAllowWait();
+      setAllowWait(next);
+      ctx.ui.notify(`Allow main conversation wait set to ${next}`, "info");
     }
   }
 
