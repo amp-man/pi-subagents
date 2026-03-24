@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Text, truncateToWidth } from "@mariozechner/pi-tui";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { AgentManager } from "./agent-manager.js";
 import {
@@ -64,21 +64,9 @@ function safeFormatTokens(session: { getSessionStats(): { tokens: { total: numbe
   try { return formatTokens(session.getSessionStats().tokens.total); } catch { return ""; }
 }
 
-const DEFAULT_RENDER_WIDTH = 120;
-
-function truncateRenderedLines(text: string): string {
-  const terminalWidth = process.stdout.columns;
-  const width = typeof terminalWidth === "number" && terminalWidth > 0 ? terminalWidth : DEFAULT_RENDER_WIDTH;
-  return text
-    .split("\n")
-    .map(line => truncateToWidth(line, width))
-    .join("\n");
-}
-
 function isMainConversationSession(sessionFile: string | undefined): boolean {
   return sessionFile != null && sessionFile.length > 0;
 }
-
 /**
  * Create an AgentActivity state and spawn callbacks for tracking tool usage.
  * Used by both foreground and background paths to avoid duplication.
@@ -265,7 +253,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       const all = [d, ...(d.others ?? [])];
-      return new Text(truncateRenderedLines(all.map(renderOne).join("\n")), 0, 0);
+      return new Text(all.map(renderOne).join("\n"), 0, 0);
     }
   );
 
@@ -658,14 +646,14 @@ Guidelines:
     renderCall(args, theme) {
       const displayName = args.subagent_type ? getDisplayName(args.subagent_type) : "Agent";
       const desc = args.description ?? "";
-      return new Text(truncateRenderedLines("▸ " + theme.fg("toolTitle", theme.bold(displayName)) + (desc ? "  " + theme.fg("muted", desc) : "")), 0, 0);
+      return new Text("▸ " + theme.fg("toolTitle", theme.bold(displayName)) + (desc ? "  " + theme.fg("muted", desc) : ""), 0, 0);
     },
 
     renderResult(result, { expanded, isPartial }, theme) {
       const details = result.details as AgentDetails | undefined;
       if (!details) {
         const text = result.content[0]?.type === "text" ? result.content[0].text : "";
-        return new Text(truncateRenderedLines(text), 0, 0);
+        return new Text(text, 0, 0);
       }
 
       // Helper: build "haiku · thinking: high · ⟳5≤30 · 3 tool uses · 33.8k tokens" stats string
@@ -687,12 +675,12 @@ Guidelines:
         const s = stats(details);
         let line = theme.fg("accent", frame) + (s ? " " + s : "");
         line += "\n" + theme.fg("dim", `  ⎿  ${details.activity ?? "thinking…"}`);
-        return new Text(truncateRenderedLines(line), 0, 0);
+        return new Text(line, 0, 0);
       }
 
       // ---- Background agent launched ----
       if (details.status === "background") {
-        return new Text(truncateRenderedLines(theme.fg("dim", `  ⎿  Running in background (ID: ${details.agentId})`)), 0, 0);
+        return new Text(theme.fg("dim", `  ⎿  Running in background (ID: ${details.agentId})`), 0, 0);
       }
 
       // ---- Completed / Steered ----
@@ -719,7 +707,7 @@ Guidelines:
           const doneText = isSteered ? "Wrapped up (turn limit)" : "Done";
           line += "\n" + theme.fg("dim", `  ⎿  ${doneText}`);
         }
-        return new Text(truncateRenderedLines(line), 0, 0);
+        return new Text(line, 0, 0);
       }
 
       // ---- Stopped (user-initiated abort) ----
@@ -727,7 +715,7 @@ Guidelines:
         const s = stats(details);
         let line = theme.fg("dim", "■") + (s ? " " + s : "");
         line += "\n" + theme.fg("dim", "  ⎿  Stopped");
-        return new Text(truncateRenderedLines(line), 0, 0);
+        return new Text(line, 0, 0);
       }
 
       // ---- Error / Aborted (hard max_turns) ----
@@ -740,7 +728,7 @@ Guidelines:
         line += "\n" + theme.fg("warning", "  ⎿  Aborted (max turns exceeded)");
       }
 
-      return new Text(truncateRenderedLines(line), 0, 0);
+      return new Text(line, 0, 0);
     },
 
     // ---- Execute ----
