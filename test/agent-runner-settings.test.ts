@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  getAllowWait,
   getDefaultMaxTurns,
   getGraceTurns,
   normalizeMaxTurns,
+  setAllowWait,
   setDefaultMaxTurns,
   setGraceTurns,
 } from "../src/agent-runner.js";
@@ -89,5 +91,26 @@ describe("setGraceTurns / getGraceTurns", () => {
   it("clamps negative values to 1", () => {
     setGraceTurns(-5);
     expect(getGraceTurns()).toBe(1);
+  });
+});
+
+describe("setAllowWait / getAllowWait", () => {
+  beforeEach(() => {
+    setAllowWait(false);
+  });
+
+  it("defaults to false", () => {
+    expect(getAllowWait()).toBe(false);
+  });
+
+  it("toggles to true", () => {
+    setAllowWait(true);
+    expect(getAllowWait()).toBe(true);
+  });
+
+  it("toggles back to false", () => {
+    setAllowWait(true);
+    setAllowWait(false);
+    expect(getAllowWait()).toBe(false);
   });
 });
