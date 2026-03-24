@@ -76,13 +76,7 @@ function truncateRenderedLines(text: string): string {
 }
 
 function isMainConversationSession(sessionFile: string | undefined): boolean {
-  if (!sessionFile) return false;
-  const normalized = sessionFile.replaceAll("\\", "/");
-  const isSubagent = normalized.includes(".pi/agent/sessions/");
-  const isClassicMain = normalized.includes(".pi/sessions/");
-  const isHarnessMain = /(^|\/)agent\/sessions\//.test(normalized);
-  const isSystemTemp = normalized.includes("/tmp/") || normalized.includes("/var/tmp/") || normalized.includes("/var/folders/");
-  return !isSubagent && !isSystemTemp && (isClassicMain || isHarnessMain);
+  return sessionFile != null && sessionFile.length > 0;
 }
 
 /**

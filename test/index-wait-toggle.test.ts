@@ -178,30 +178,6 @@ describe("wait toggle guards", () => {
     );
   });
 
-  it("blocks wait=true for agent/sessions main conversation paths", async () => {
-    records.set("agent-1b", {
-      id: "agent-1b",
-      type: "general-purpose",
-      description: "test",
-      status: "completed",
-      toolUses: 0,
-      startedAt: Date.now(),
-      completedAt: Date.now(),
-      result: "done",
-    });
-
-    const result = await getSubagentResultTool.execute(
-      "tool-call-id",
-      { agent_id: "agent-1b", wait: true },
-      undefined,
-      undefined,
-      { sessionManager: { getSessionFile: () => "/Users/ludwig/agent/sessions/main-session.json" } },
-    );
-
-    expect(result.content[0].text).toBe(
-      "Blocked: wait is disabled for the main conversation. Use wait: false or enable blocking in /agents -> Settings.",
-    );
-  });
 
   it("allows wait=true in the main conversation when enabled", async () => {
     setAllowBlocking(true);
@@ -232,41 +208,21 @@ describe("wait toggle guards", () => {
     expect(result.content[0].text).toContain("done");
   });
 
-  it("does not block wait=true for subagent sessions", async () => {
+  it("does not block wait=true for subagent sessions with no session file", async () => {
     const { record, resolvePromise } = createRunningRecord("agent-3");
     records.set("agent-3", record);
-
     const execPromise = getSubagentResultTool.execute(
       "tool-call-id",
       { agent_id: "agent-3", wait: true },
       undefined,
       undefined,
-      { sessionManager: { getSessionFile: () => ".pi/agent/sessions/subagent-session.json" } },
+      { sessionManager: { getSessionFile: () => undefined } },
     );
-
     resolvePromise();
     const result = await execPromise;
-
     expect(result.content[0].text).toContain("done");
   });
 
-  it("does not block wait=true for temp agent/sessions paths", async () => {
-    const { record, resolvePromise } = createRunningRecord("agent-4");
-    records.set("agent-4", record);
-
-    const execPromise = getSubagentResultTool.execute(
-      "tool-call-id",
-      { agent_id: "agent-4", wait: true },
-      undefined,
-      undefined,
-      { sessionManager: { getSessionFile: () => "/var/tmp/agent/sessions/subagent-session.json" } },
-    );
-
-    resolvePromise();
-    const result = await execPromise;
-
-    expect(result.content[0].text).toContain("done");
-  });
 
   it("blocks foreground Agent calls in the main conversation by default", async () => {
     const result = await agentTool.execute(
