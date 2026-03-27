@@ -183,7 +183,10 @@ export class AgentManager {
         if (record.worktree) {
           const wtResult = cleanupWorktree(ctx.cwd, record.worktree, options.description);
           record.worktreeResult = wtResult;
-          if (wtResult.hasChanges && wtResult.branch) {
+          if (wtResult.error) {
+            record.result = (record.result ?? "") +
+              `\n\n---\n⚠️ ${wtResult.error}`;
+          } else if (wtResult.hasChanges && wtResult.branch) {
             record.result = (record.result ?? "") +
               `\n\n---\nChanges saved to branch \`${wtResult.branch}\`. Merge with: \`git merge ${wtResult.branch}\``;
           }
@@ -212,10 +215,11 @@ export class AgentManager {
 
         // Best-effort worktree cleanup on error
         if (record.worktree) {
-          try {
-            const wtResult = cleanupWorktree(ctx.cwd, record.worktree, options.description);
-            record.worktreeResult = wtResult;
-          } catch { /* ignore cleanup errors */ }
+          const wtResult = cleanupWorktree(ctx.cwd, record.worktree, options.description);
+          record.worktreeResult = wtResult;
+          if (wtResult.error) {
+            record.error = (record.error ?? "") + `\n${wtResult.error}`;
+          }
         }
 
         if (options.isBackground) {

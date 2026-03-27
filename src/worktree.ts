@@ -26,6 +26,8 @@ export interface WorktreeCleanupResult {
   branch?: string;
   /** Worktree path if it was kept. */
   path?: string;
+  /** Error message if commit/branch creation failed. Changes are preserved at `path`. */
+  error?: string;
 }
 
 /**
@@ -127,10 +129,15 @@ export function cleanupWorktree(
       branch: worktree.branch,
       path: worktree.path,
     };
-  } catch {
-    // Best effort cleanup on error
-    try { removeWorktree(cwd, worktree.path); } catch { /* ignore */ }
-    return { hasChanges: false };
+  } catch (err) {
+    // Do NOT remove the worktree — preserve the agent's changes so the user can recover.
+    // The worktree path is returned so callers can surface it.
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      hasChanges: true,
+      path: worktree.path,
+      error: `Failed to commit worktree changes: ${message}. Changes preserved at ${worktree.path}`,
+    };
   }
 }
 
