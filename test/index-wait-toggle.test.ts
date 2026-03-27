@@ -67,6 +67,10 @@ vi.mock("../src/cross-extension-rpc.js", () => ({
   }),
 }));
 
+vi.mock("../src/custom-agents.js", () => ({
+  loadCustomAgents: () => new Map(),
+}));
+
 import extension from "../src/index.js";
 
 function createRunningRecord(id: string) {
