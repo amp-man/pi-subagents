@@ -887,8 +887,8 @@ Guidelines:
           `Description: ${params.description}\n` +
           (record?.outputFile ? `Output file: ${record.outputFile}\n` : "") +
           (isQueued ? `Position: queued (max ${manager.getMaxConcurrent()} concurrent)\n` : "") +
-          `\nYou will be notified when this agent completes.\n` +
-          `Use get_subagent_result to retrieve full results, or steer_subagent to send it messages.\n` +
+          `\nYou will be notified automatically when this agent completes.\n` +
+          `Use steer_subagent to send it messages if needed.\n` +
           `Do not duplicate this agent's work.`,
           { ...detailBase, toolUses: 0, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
         );
@@ -1039,7 +1039,7 @@ Guidelines:
         `Description: ${record.description}\n\n`;
 
       if (record.status === "running") {
-        output += "Agent is still running. Use wait: true or check back later.";
+        output += "Agent is still running. You will be notified automatically when it completes.";
       } else if (record.status === "error") {
         output += `Error: ${record.error}`;
       } else {
